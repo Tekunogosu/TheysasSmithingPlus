@@ -71,11 +71,24 @@ public class ToolMoldUnitsPatch
         return (int)MathF.Floor(voxelCount.Value * unitsPerVoxel / 5) * 5;
     }
 
+    /// <summary>
+    ///     The total voxels the given stacks are worth, or null when none of them can be priced. One pass:
+    ///     each stack's count costs a search over the smithing recipes, so they are summed as they are
+    ///     computed rather than collected and walked again.
+    /// </summary>
     public static int? VoxelCountForStacks(ICoreAPI api, ItemStack[] smithedItemStacks)
     {
-        var voxelCounts = smithedItemStacks.Select(stack =>
-            VoxelCountForStack(api, stack)).ToArray();
-        return voxelCounts.All(count => count == null) ? null : voxelCounts.Sum(count => count ?? 0);
+        var total = 0;
+        var anyPriced = false;
+        for (var i = 0; i < smithedItemStacks.Length; i++)
+        {
+            var count = VoxelCountForStack(api, smithedItemStacks[i]);
+            if (count == null) continue;
+            anyPriced = true;
+            total += count.Value;
+        }
+
+        return anyPriced ? total : null;
     }
 
     private static int? VoxelCountForStack(ICoreAPI api, ItemStack stack)

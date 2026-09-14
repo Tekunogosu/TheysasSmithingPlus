@@ -161,6 +161,23 @@ public static class AnvilRecipeSelectorPatch
         };
     }
 
+    /// <summary>
+    ///     The material the hovered recipe consumes, or the stack itself when it names no recipe.
+    ///     <para>
+    ///         The slot index addresses the skill item list, which is not the recipe list and can be longer
+    ///         than it, so it is range-checked here rather than used to index straight in.
+    ///     </para>
+    /// </summary>
+    private static ItemStack? MaterialStackFor(ICoreClientAPI capi, ItemStack[]? slotStacks, int num)
+    {
+        if (slotStacks is not { Length: > 0 }) return null;
+        var stack = slotStacks[0];
+
+        var recipes = stack.Collectible.GetCollectibleInterface<IAnvilWorkable>()?.GetMatchingRecipes(stack);
+        if (recipes == null || num < 0 || num >= recipes.Count) return stack;
+        return GetAdjustedIngredientStack(capi, stack, recipes[num].RecipeId);
+    }
+
     private static void OnSlotOver(
         GuiDialogBlockEntityRecipeSelector recipeSelector,
         int prevSlotOver,
@@ -175,21 +192,12 @@ public static class AnvilRecipeSelectorPatch
         recipeSelector.SingleComposer.GetDynamicText("desc").SetNewText(currentSkillItem.Description);
 
         var text = "";
-        ItemStack? materialStack = null;
-        if (skillItems[num].Data is ItemStack[] data )
-        {
-            var stack = data[0];
-            var cInterface = stack.Collectible.GetCollectibleInterface<IAnvilWorkable>();
-            var recipe = cInterface?.GetMatchingRecipes(stack)[num];
-            materialStack = recipe != null ? GetAdjustedIngredientStack(capi, stack, recipe.RecipeId) : stack;
-        }
-        if (skillItems[num].Data is CustomSkillItemData { DefaultData: ItemStack[] customData })
-        {
-            var stack = customData[0];
-            var cInterface = stack.Collectible.GetCollectibleInterface<IAnvilWorkable>();
-            var recipe = cInterface?.GetMatchingRecipes(stack)[num];
-            materialStack = recipe != null ? GetAdjustedIngredientStack(capi, stack, recipe.RecipeId) : stack;
-        }
+        // The slot's stack is carried either directly or wrapped, and the two were handled by identical
+        // blocks. Taking whichever is present first leaves one path to the lookup below.
+        var slotData = skillItems[num].Data;
+        var slotStacks = slotData as ItemStack[]
+                         ?? (slotData is CustomSkillItemData wrapped ? wrapped.DefaultData as ItemStack[] : null);
+        var materialStack = MaterialStackFor(capi, slotStacks, num);
         if (materialStack != null){
             text = Lang.Get("recipeselector-requiredcount", materialStack.StackSize,
                 materialStack.GetName().ToLower());

@@ -1,7 +1,6 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using SmithingPlus.Common.Metal;
 using Vintagestory.API.Common;
 using Vintagestory.API.Datastructures;
@@ -118,75 +117,31 @@ public static class ItemStackExtensions
         return stack.Collectible.Code.Equals(that.Collectible.Code);
     }
 
-    public static float GetWorkableTemperature(this ItemStack stack)
+    /// <summary>
+    ///     The temperature at which the stack becomes workable.
+    ///     <para>
+    ///         An item stating its own <c>workableTemperature</c> is answered from that attribute alone. The
+    ///         computed default is only reached when there is no such attribute, because deriving it can
+    ///         cost a metal material lookup and the result would then be discarded. This is a per-frame path
+    ///         while a tooltip is on screen, and iron blooms carry the attribute.
+    ///     </para>
+    /// </summary>
+    public static float GetWorkableTemperature(this ItemStack stack, ICoreAPI? api = null)
     {
-        var meltingPoint = stack.Collectible.CombustibleProps?.MeltingPoint
-                           ?? stack.GetOrCacheMetalMaterial(Core.Api)?.MetalBitItem?.CombustibleProps?.MeltingPoint
+        var stated = stack.ItemAttributes?["workableTemperature"];
+        if (stated?.Exists == true)
+        {
+            var value = stated.AsFloat(float.NaN);
+            if (!float.IsNaN(value)) return value;
+        }
+
+        var meltingPoint = stack.Collectible?.CombustibleProps?.MeltingPoint
+                           ?? stack.GetOrCacheMetalMaterial(api ?? Core.Api)?.MetalBitItem?.CombustibleProps
+                               ?.MeltingPoint
                            ?? 0f;
-        var defaultTemperature = meltingPoint / 2f;
-        return stack.ItemAttributes?["workableTemperature"]?.AsFloat(defaultTemperature) ?? defaultTemperature;
+        return meltingPoint / 2f;
     }
 
-    public static SmithingRecipe? GetSmithingRecipe(this ItemStack toolHead, ICoreAPI api)
-    {
-        var smithingRecipe = api.ModLoader
-            .GetModSystem<RecipeRegistrySystem>()?
-            .SmithingRecipes?
-            .FirstOrDefault(r => r?.Output?.ResolvedItemstack?.Satisfies(toolHead) == true);
-        return smithingRecipe;
-    }
-
-    public static SmithingRecipe? GetSmithingRecipe(this ItemStack toolHead, ICoreAPI api, int withOutputStackSize)
-    {
-        var smithingRecipe = api.ModLoader
-            .GetModSystem<RecipeRegistrySystem>()?
-            .SmithingRecipes?
-            .FirstOrDefault(r =>
-                r?.Output?.ResolvedItemstack?.Satisfies(toolHead) == true
-                && r.Output.ResolvedItemstack.StackSize == withOutputStackSize);
-        return smithingRecipe;
-    }
-
-    // Gets the smithing recipe with the largest output stack that satisfies the tool head
-    public static SmithingRecipe? GetLargestSmithingRecipe(this ItemStack toolHead, ICoreAPI api)
-    {
-        var smithingRecipe = api.ModLoader
-                .GetModSystem<RecipeRegistrySystem>()?
-                .SmithingRecipes?
-                .Where(r => r?.Output?.ResolvedItemstack?.Satisfies(toolHead) == true)
-                .OrderByDescending(r => r.Output.ResolvedItemstack.StackSize)
-                .FirstOrDefault()
-            ;
-        return smithingRecipe;
-    }
-
-    // Gets the smithing recipe with the least expensive output that satisfies the tool head
-    public static SmithingRecipe? GetCheapestSmithingRecipe(this ItemStack toolHead, ICoreAPI api)
-    {
-        var smithingRecipe = api.ModLoader
-                .GetModSystem<RecipeRegistrySystem>()?
-                .SmithingRecipes?
-                .Where(r => r?.Output?.ResolvedItemstack?.Satisfies(toolHead) == true)
-                .OrderByDescending(r => r.Voxels.VoxelCount() / r.Output.ResolvedItemstack.StackSize)
-                .FirstOrDefault()
-            ;
-        return smithingRecipe;
-    }
-
-    public static IEnumerable<GridRecipe> GetGridRecipes(this ItemStack itemStack, ICoreAPI api)
-    {
-        var gridRecipes =
-            from recipe in api.World.GridRecipes
-            where recipe.Output?.ResolvedItemStack?.Satisfies(itemStack) == true
-            select recipe;
-        return gridRecipes;
-    }
-
-    // Gets a smithing recipe only if the output item stack has a single item
-    public static SmithingRecipe? GetSingleSmithingRecipe(this ItemStack toolHead, ICoreAPI api)
-    {
-        return toolHead.GetSmithingRecipe(api, 1);
-    }
 
     public static float GetSplitCount(this ItemStack stack)
     {

@@ -1,11 +1,17 @@
 <Project>
-  <!-- Set your vs installation here! -->
+  <!-- The Vintage Story install to compile against: the folder holding
+       VintagestoryAPI.dll. VINTAGE_STORY_1_22 is honoured first so a machine
+       pinning a specific game version keeps working, then the conventional
+       VINTAGE_STORY, then the default Linux install path. Without the fallbacks
+       an unset VINTAGE_STORY_1_22 leaves every HintPath rooted at nothing and
+       the build fails on missing assembly references rather than on a clear
+       message about the game not being found. -->
   <PropertyGroup>
-    <VINTAGE_STORY>$(VINTAGE_STORY_1_22)</VINTAGE_STORY>
+    <VINTAGE_STORY Condition="'$(VINTAGE_STORY_1_22)' != ''">$(VINTAGE_STORY_1_22)</VINTAGE_STORY>
+    <VINTAGE_STORY Condition="'$(VINTAGE_STORY)' == ''">$(HOME)/.local/share/vintagestory</VINTAGE_STORY>
     <WorldName>[TEST] SmithingPlus</WorldName>
     <TestDir>$(SolutionDir)/test</TestDir>
     <TestDataPath>$(TestDir)/VintagestoryData</TestDataPath>
-    <DevModPath>$(HOME)/Library/Application Support/VintagestoryDev/Mods</DevModPath>
   </PropertyGroup>
 
   <!-- Shorten stacktrace paths -->

@@ -40,7 +40,7 @@ public partial class ShowWorkablePatches
         if (__instance.WorkItemStack is not { } workItemStack) return;
         var temperature =
             (int)workItemStack.Collectible.GetTemperature(__instance.Api.World, workItemStack);
-        var workableTemp = workItemStack.GetWorkableTemperature();
+        var workableTemp = workItemStack.GetWorkableTemperature(__instance.Api);
 
         var metalProps = workItemStack.Collectible
             .GetBehavior<CollectibleBehaviorQuenchable>()

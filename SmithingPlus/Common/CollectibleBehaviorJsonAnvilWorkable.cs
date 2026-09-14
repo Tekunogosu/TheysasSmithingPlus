@@ -1,6 +1,5 @@
 #nullable enable
 using System;
-using System.Linq;
 using JetBrains.Annotations;
 using SmithingPlus.Util;
 using Vintagestory.API.Common;
@@ -12,9 +11,20 @@ namespace SmithingPlus.Common;
 public sealed class CollectibleBehaviorJsonAnvilWorkable(CollectibleObject collObj)
     : CollectibleBehaviorAnvilWorkable(collObj)
 {
+    private byte[,,]? _fixedVoxels;
+
+    /// <summary>
+    ///     The voxel pattern for this collectible.
+    ///     <para>
+    ///         A pattern with random voxels has to be generated per read, since each placement is meant to
+    ///         differ. A pattern without them is the same array every time, so it is generated once: reads
+    ///         are frequent (the handbook and every placement attempt) and each generation fills a
+    ///         16x6x16 array.
+    ///     </para>
+    /// </summary>
     protected override byte[,,] Voxels => HasExtraVoxels
         ? GenVoxelsFromJsonPatternWithExtra(Pattern, Api?.World.Rand, ExtraVoxelChance)
-        : GenVoxelsFromJsonPattern(Pattern);
+        : _fixedVoxels ??= GenVoxelsFromJsonPattern(Pattern);
 
     private string[][] Pattern { get; set; } = [[]];
     private bool HasExtraVoxels { get; set; }
@@ -35,11 +45,25 @@ public sealed class CollectibleBehaviorJsonAnvilWorkable(CollectibleObject collO
             : EnumHelveWorkableMode.NotWorkable;
         var jsonPattern = properties[PropertyKeys.Voxels].Exists ? properties[PropertyKeys.Voxels].AsArray() : null;
         if (jsonPattern is not { Length: > 0 }) return;
-        var jsonArray = jsonPattern.Select(s => s.AsArray()).ToArray();
-        Pattern = jsonArray
-            .Select(s =>
-                s.Select(t => t.AsString()).ToArray()
-            ).ToArray();
+
+        // Layer of rows of strings, built directly. A row the JSON leaves out becomes an empty layer rather
+        // than a null one, so the generator below can index it without checking.
+        var pattern = new string[jsonPattern.Length][];
+        for (var layer = 0; layer < jsonPattern.Length; layer++)
+        {
+            var rows = jsonPattern[layer]?.AsArray();
+            if (rows == null)
+            {
+                pattern[layer] = [];
+                continue;
+            }
+
+            var built = new string[rows.Length];
+            for (var row = 0; row < rows.Length; row++) built[row] = rows[row]?.AsString() ?? "";
+            pattern[layer] = built;
+        }
+
+        Pattern = pattern;
     }
 
     public override EnumHelveWorkableMode GetHelveWorkableMode(ItemStack stack, BlockEntityAnvil beAnvil)
@@ -94,6 +118,11 @@ public sealed class CollectibleBehaviorJsonAnvilWorkable(CollectibleObject collO
         // Fallback if api is not available
         extraVoxelChance = hasExtraVoxels ? extraVoxelChance : 0;
         var voxels = new byte[16, 6, 16];
+
+        // An empty grid for an empty pattern. The default pattern is one empty layer, which a collectible
+        // declaring no voxels keeps, and reading a row out of it would throw rather than yield nothing.
+        if (pattern.Length == 0 || pattern[0].Length == 0 || pattern[0][0].Length == 0) return voxels;
+
         var length = pattern[0][0].Length;
         var width = pattern[0].Length;
         var height = pattern.Length;

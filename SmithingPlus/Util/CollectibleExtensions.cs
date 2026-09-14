@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
+using SmithingPlus.Common.Metal;
 using Vintagestory.API.Common;
 using Vintagestory.API.Datastructures;
 using Vintagestory.API.MathTools;
@@ -36,10 +37,22 @@ public static class CollectibleExtensions
         collObj.Attributes.Token = token;
     }
 
+    /// <summary>Adds the behavior, replacing one of the same type if the collectible already carries it.</summary>
     public static void AddBehavior<T>(this CollectibleObject collectible) where T : CollectibleBehavior
     {
-        var existingBehavior = collectible.CollectibleBehaviors.FirstOrDefault(b => b.GetType() == typeof(T));
-        collectible.CollectibleBehaviors.Remove(existingBehavior);
+        // A plain scan of a short array: this runs for every collectible in the game during asset finalize,
+        // where the closure a predicate needs is allocated once per call for no benefit.
+        //
+        // Remove() returns a new array rather than mutating in place, so its result has to be assigned
+        // back. Discarding it leaves the old behavior in place and the new one appended beside it.
+        var behaviors = collectible.CollectibleBehaviors;
+        for (var i = 0; i < behaviors.Length; i++)
+            if (behaviors[i].GetType() == typeof(T))
+            {
+                collectible.CollectibleBehaviors = behaviors.Remove(behaviors[i]);
+                break;
+            }
+
         if (Activator.CreateInstance(typeof(T), collectible) is not T behavior)
         {
             Core.Logger.Error("[CollectibleExtensions] Failed to create behavior {0} for {1}", typeof(T).Name,
@@ -71,58 +84,77 @@ public static class CollectibleExtensions
         return repairable;
     }
 
+    /// <summary>The first smithing recipe whose output is <paramref name="collObj" />, or null.</summary>
     public static SmithingRecipe? GetSmithingRecipe(this CollectibleObject collObj, ICoreAPI api)
     {
-        var smithingRecipe = api.ModLoader
-            .GetModSystem<RecipeRegistrySystem>()
-            .SmithingRecipes
-            .FirstOrDefault(r => r.Output.ResolvedItemstack.Collectible.Code.Equals(collObj.Code));
-        return smithingRecipe;
+        var recipes = api.GetSmithingRecipes();
+        if (recipes == null) return null;
+        // A plain loop over the backing list: this runs once per collectible whose metal is still unknown
+        // while the anvil's interaction help is built, and it exits at the first match.
+        for (var i = 0; i < recipes.Count; i++)
+        {
+            var recipe = recipes[i];
+            if (recipe?.Output?.ResolvedItemstack?.Collectible?.Code?.Equals(collObj.Code) is true) return recipe;
+        }
+
+        return null;
     }
 
-    public static IEnumerable<SmithingRecipe> GetSmithingRecipesAsIngredient(this CollectibleObject collObj,
+    /// <summary>
+    ///     The smithing recipes using <paramref name="collObj" /> as an ingredient. Served from
+    ///     <see cref="SmithingRecipeIndex" />, which answers from one pass over the recipe list rather than
+    ///     one pass per caller. The result is already materialised, so enumerating it twice costs nothing.
+    /// </summary>
+    public static IReadOnlyList<SmithingRecipe> GetSmithingRecipesAsIngredient(this CollectibleObject collObj,
         ICoreAPI api)
     {
-        var smithingRecipes =
-            from recipe in api.ModLoader.GetModSystem<RecipeRegistrySystem>().SmithingRecipes
-            from ing in recipe.Ingredients
-            where ing.ResolvedItemStack?.Collectible?.Code?.Equals(collObj.Code) is true
-            select recipe;
-        return smithingRecipes;
+        return SmithingRecipeIndex.RecipesAsIngredient(api, collObj);
     }
 
-    public static IEnumerable<GridRecipe> GetGridRecipesAsIngredient(this CollectibleObject collObj, ICoreAPI api)
+    /// <summary>
+    ///     The grid recipes using <paramref name="collObj" /> as an ingredient. Served from
+    ///     <see cref="GridRecipeIndex" />, which answers from one pass over the recipe list rather than one
+    ///     pass per caller. The result is already materialised, so enumerating it twice costs nothing.
+    /// </summary>
+    public static IReadOnlyList<GridRecipe> GetGridRecipesAsIngredient(this CollectibleObject collObj, ICoreAPI api)
     {
-        var gridRecipes =
-            from recipe in api.World.GridRecipes
-            from ing in recipe.RecipeIngredients
-            where ing is { ResolvedItemStack.Collectible: not null } &&
-                  ing.ResolvedItemStack?.Collectible?.Code?.Equals(collObj.Code) is true
-            select recipe;
-        return gridRecipes;
+        return GridRecipeIndex.RecipesAsIngredient(api, collObj);
     }
 
+    /// <summary>
+    ///     The API a collectible was loaded with, read from the private field the game sets on it.
+    ///     <para>
+    ///         CollectibleObject exposes no accessor for it, so reflection is the only route. The field name
+    ///         lives here alone rather than at each call site, so a rename in the game breaks one place.
+    ///         Callers reading this per frame or per item should hold the result; the lookup itself is
+    ///         cached by <see cref="ReflectionExtensions" />, but the call is not free.
+    ///     </para>
+    /// </summary>
+    public static ICoreAPI? GetLoadedApi(this CollectibleObject collObj)
+    {
+        return collObj.GetField<ICoreAPI>("api");
+    }
+
+    /// <summary>
+    ///     The collectible of the same code with one variant part replaced, resolved against the item class
+    ///     it belongs to, or null if there is no such collectible.
+    /// </summary>
     public static CollectibleObject? CollectibleWithVariant(this CollectibleObject collObj, string type, string value)
     {
-        var api = collObj.GetField<ICoreAPI>("api");
+        var api = collObj.GetLoadedApi();
         if (api == null)
         {
-            Core.Logger.Error("[CollectibleWithVariant] Reflection failed to get collectible object api field");
+            Core.Logger?.Error("[CollectibleWithVariant] Reflection failed to get collectible object api field");
             return null;
         }
 
         var codeWithVariant = collObj.CodeWithVariant(type, value);
-        switch (collObj.ItemClass)
+        return collObj.ItemClass switch
         {
-            case EnumItemClass.Block:
-                return api.World.GetBlock(codeWithVariant);
-            case EnumItemClass.Item:
-                return api.World.GetItem(codeWithVariant);
-            default:
-                Core.Logger.Error(
-                    $"[CollectibleWithVariant] Invalid ItemClass \"{collObj.ItemClass}\" for collectible {collObj.Code}");
-                return null;
-        }
+            EnumItemClass.Block => api.World.GetBlock(codeWithVariant),
+            EnumItemClass.Item => api.World.GetItem(codeWithVariant),
+            _ => null
+        };
     }
 
     public static T GetBehavior<T>(this CollectibleObject collObj, bool withInheritance) where T : CollectibleBehavior

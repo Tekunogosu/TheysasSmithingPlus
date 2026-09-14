@@ -11,7 +11,7 @@ public class CollectibleBehaviorDisplayWorkableTemp(CollectibleObject collObj) :
     public override void GetHeldItemInfo(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
     {
         base.GetHeldItemInfo(inSlot, dsc, world, withDebugInfo);
-        var workableTemp = inSlot.Itemstack?.GetWorkableTemperature();
+        var workableTemp = inSlot.Itemstack?.GetWorkableTemperature(Core.ApiFor(world));
         var temperature = inSlot.Itemstack?.Collectible.GetTemperature(world, inSlot.Itemstack);
         if (workableTemp != null)
             dsc.AppendLine(Lang.Get("Workable Temperature: {0}",

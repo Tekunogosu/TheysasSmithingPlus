@@ -117,16 +117,13 @@ public class ItemDamagedPatches
         return smithingRecipe;
     }
 
+    /// <summary>
+    ///     The tool head this item is crafted from: the repairable-tool-head ingredient of the first grid
+    ///     recipe producing a single one of it. Falls back to the item itself when there is no such recipe.
+    /// </summary>
     private static ItemStack GetToolHead(ICoreAPI api, ItemStack itemStack)
     {
-        var toolRecipe = itemStack
-            .GetGridRecipes(api)
-            .FirstOrDefault(r =>
-                r.Output?.ResolvedItemStack?.StackSize == 1);
-        var toolHead = toolRecipe?.RecipeIngredients
-            .FirstOrDefault(k =>
-                k?.ResolvedItemStack?.Collectible?.HasBehavior<CollectibleBehaviorRepairableToolHead>() ?? false)
-            ?.ResolvedItemStack;
+        var toolHead = FindToolHead(api, itemStack);
         if (toolHead == null)
         {
             toolHead = itemStack;
@@ -135,6 +132,30 @@ public class ItemDamagedPatches
 
         Core.Logger.VerboseDebug("Tool head: {0}", toolHead);
         return toolHead;
+    }
+
+    private static ItemStack? FindToolHead(ICoreAPI api, ItemStack itemStack)
+    {
+        var recipes = api.World.GridRecipes;
+        for (var i = 0; i < recipes.Count; i++)
+        {
+            var recipe = recipes[i];
+            if (recipe?.Output?.ResolvedItemStack?.StackSize != 1) continue;
+            if (recipe.Output.ResolvedItemStack.Satisfies(itemStack) != true) continue;
+
+            var ingredients = recipe.ResolvedIngredients;
+            if (ingredients == null) continue;
+            for (var j = 0; j < ingredients.Length; j++)
+            {
+                var stack = ingredients[j]?.ResolvedItemStack;
+                if (stack?.Collectible?.HasBehavior<CollectibleBehaviorRepairableToolHead>() == true) return stack;
+            }
+
+            // The original took the first single-output recipe and then looked inside only that one.
+            return null;
+        }
+
+        return null;
     }
 
     private static byte[,,] ByteVoxelsFromRecipe(SmithingRecipe recipe, int stackSize = 1)

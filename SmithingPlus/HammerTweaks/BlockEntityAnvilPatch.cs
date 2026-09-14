@@ -1,7 +1,6 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using HarmonyLib;
 using JetBrains.Annotations;
 using SmithingPlus.Util;
@@ -16,6 +15,12 @@ namespace SmithingPlus.HammerTweaks;
 [HarmonyPatchCategory(Core.HammerTweaksCategory)]
 public static class BlockEntityAnvilPatch
 {
+    /// <summary>Width and depth of an anvil's voxel grid, as BlockEntityAnvil sizes it.</summary>
+    private const int VoxelWidth = 16;
+
+    /// <summary>Height of an anvil's voxel grid.</summary>
+    private const int VoxelHeight = 6;
+
     [HarmonyPrefix]
     [HarmonyPatch("OnPlayerInteract")]
     public static bool Prefix_OnPlayerInteract(
@@ -125,8 +130,13 @@ public static class BlockEntityAnvilPatch
     {
         if (axis == EnumAxis.Y) throw new ArgumentException("Axis Y is not supported for flipping.");
         if (!HasAnyMetalVoxel(beAnvil)) return;
+
+        // Rotated for the offset alone, which comes back through minY; the rotated grid itself is not
+        // wanted. Measuring against the recipe outline combined with the work item keeps the piece and its
+        // outline settling by the same amount, so the two stay aligned after the flip.
         int? minY = null;
-        beAnvil.recipeVoxels.ToByteArray().Union(beAnvil.Voxels).RotateAroundAxis(axis, ref minY);
+        _ = beAnvil.recipeVoxels.ToByteArray().Union(beAnvil.Voxels).RotateAroundAxis(axis, ref minY);
+
         var rotatedVoxels = beAnvil.Voxels.RotateAroundAxis(axis, ref minY);
         if (minY.HasValue) beAnvil.WorkItemStack.Attributes.SetInt(ModStackAttributes.MinY, minY.Value);
         beAnvil.Voxels = rotatedVoxels;
@@ -201,37 +211,48 @@ public static class BlockEntityAnvilPatch
             return rotatedVoxels;
         }
 
-        // Temporary list to hold rotated voxel info.
-        var rotatedList = new List<(int X, int Y, int Z, byte Value)>();
-        // Compute center of mass for all nonzero voxels.
-        var center = new Vec3f { X = 7.5f, Y = 2.5f, Z = 7.5f };
-        for (var x = 0; x < 16; x++)
-        for (var y = 0; y < 6; y++)
-        for (var z = 0; z < 16; z++)
-            if (axis == EnumAxis.X) // Rotate around X axis (in the Y-Z plane).
-            {
-                var value = voxels[x, y, z];
-                if (value == 0) continue;
-                var newY = (int)Math.Round(2 * center.Y - y);
-                var newZ = (int)Math.Round(2 * center.Z - z);
-                rotatedList.Add((x, newY, newZ, value));
-            }
-            else // Rotate around Z axis (in the X-Y plane).
-            {
-                var value = voxels[x, y, z];
-                if (value == 0) continue;
-                var newX = (int)Math.Round(2 * center.X - x);
-                var newY = (int)Math.Round(2 * center.Y - y);
-                rotatedList.Add((newX, newY, z, value));
-            }
+        // Flipping about the grid's centre: doubling the centre and subtracting the coordinate mirrors it,
+        // which for a half-integer centre lands exactly on another cell, so no rounding is involved.
+        // X rotation mirrors Y and Z; Z rotation mirrors X and Y.
+        const int mirrorY = VoxelHeight - 1;
+        const int mirrorXz = VoxelWidth - 1;
+        var aroundX = axis == EnumAxis.X;
 
-        // Determine the min Y value among rotated voxels.
-        var minRotY = minY ??= rotatedList.Select(point => point.Y).Prepend(int.MaxValue).Min();
-        // Offset all Y's so that the lowest voxel is at y=0.
-        foreach (var (x, y, z, value) in rotatedList)
+        // Written into a scratch grid in one pass rather than collected as points and replayed. The offset
+        // that settles the result back onto the anvil needs the lowest occupied row, which is tracked while
+        // writing instead of scanned for afterwards.
+        var mirrored = new byte[VoxelWidth, VoxelHeight, VoxelWidth];
+        var lowestY = int.MaxValue;
+        for (var x = 0; x < VoxelWidth; x++)
+        for (var y = 0; y < VoxelHeight; y++)
+        for (var z = 0; z < VoxelWidth; z++)
         {
-            var finalY = y - minRotY;
-            if (x is >= 0 and < 16 && finalY is >= 0 and < 6 && z is >= 0 and < 16) rotatedVoxels[x, finalY, z] = value;
+            var value = voxels[x, y, z];
+            if (value == 0) continue;
+
+            var newX = aroundX ? x : mirrorXz - x;
+            var newY = mirrorY - y;
+            var newZ = aroundX ? mirrorXz - z : z;
+
+            mirrored[newX, newY, newZ] = value;
+            if (newY < lowestY) lowestY = newY;
+        }
+
+        // Settle the shape back down so its lowest voxel rests at y = 0. The caller keeps this offset so a
+        // later mesh rotation of the same work item shifts by the same amount.
+        //
+        // An empty grid still records the offset, as the scan this replaced did, so a caller that pins the
+        // value sees the same thing either way. Nothing is then written, since there is nothing to write.
+        var drop = minY ??= lowestY;
+        if (lowestY == int.MaxValue) return rotatedVoxels;
+        for (var x = 0; x < VoxelWidth; x++)
+        for (var y = 0; y < VoxelHeight; y++)
+        for (var z = 0; z < VoxelWidth; z++)
+        {
+            var value = mirrored[x, y, z];
+            if (value == 0) continue;
+            var finalY = y - drop;
+            if (finalY is >= 0 and < VoxelHeight) rotatedVoxels[x, finalY, z] = value;
         }
 
         return rotatedVoxels;

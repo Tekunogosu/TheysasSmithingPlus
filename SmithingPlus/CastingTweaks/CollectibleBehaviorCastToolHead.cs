@@ -14,16 +14,26 @@ namespace SmithingPlus.CastingTweaks;
 
 public class CollectibleBehaviorCastToolHead(CollectibleObject collObj) : CollectibleBehavior(collObj), IAnvilWorkable
 {
-    private ICoreAPI Api => collObj.GetField<ICoreAPI>("api");
+    private ICoreAPI? _api;
+
+    /// <summary>
+    ///     The API, read once from the collectible's private field and kept; see the same property on
+    ///     <see cref="Common.CollectibleBehaviorAnvilWorkable" />. This one is also on the path the anvil's
+    ///     interaction help walks, through <see cref="GetRequiredAnvilTier" />.
+    /// </summary>
+    private ICoreAPI? Api => _api ??= collObj.GetLoadedApi();
 
     public int GetRequiredAnvilTier(ItemStack stack)
     {
-        return stack.GetOrCacheMetalMaterial(Api)?.Tier ?? 0;
+        var api = Api;
+        return api == null ? 0 : stack.GetOrCacheMetalMaterial(api)?.Tier ?? 0;
     }
 
     public List<SmithingRecipe> GetMatchingRecipes(ItemStack stack)
     {
-        var smithingRecipe = stack.GetSmithingRecipe(Api);
+        var api = Api;
+        if (api == null) return [];
+        var smithingRecipe = stack.GetSmithingRecipe(api);
         return smithingRecipe != null ? [smithingRecipe] : [];
     }
 
@@ -31,7 +41,9 @@ public class CollectibleBehaviorCastToolHead(CollectibleObject collObj) : Collec
     {
         if (!stack.IsCastTool())
             return false;
-        var temperature = stack.Collectible.GetTemperature(Api.World, stack);
+        var api = Api;
+        if (api == null) return false;
+        var temperature = stack.Collectible.GetTemperature(api.World, stack);
         var threshold = GetWorkableTemperature(stack);
         Core.Logger.VerboseDebug(
             $"[CollectibleBehaviorCastToolHead#CanWork] {stack.Collectible.Code} - Temperature: {temperature}, Threshold: {threshold}");
@@ -42,7 +54,7 @@ public class CollectibleBehaviorCastToolHead(CollectibleObject collObj) : Collec
     {
         if (beAnvil.WorkItemStack != null || !CanWork(stack))
             return null;
-        var recipe = stack.GetSingleSmithingRecipe(Api);
+        var recipe = stack.GetSingleSmithingRecipe(beAnvil.Api);
         var durabilityPercent = stack.GetDurabilityPercentage();
         if (recipe == null || durabilityPercent == null) return null;
         var voxels = recipe.Voxels.ErodeToPercentage(durabilityPercent.Value);
@@ -62,7 +74,9 @@ public class CollectibleBehaviorCastToolHead(CollectibleObject collObj) : Collec
 
     public ItemStack? GetBaseMaterial(ItemStack stack)
     {
-        var metalMaterial = stack.GetOrCacheMetalMaterial(Api);
+        var api = Api;
+        if (api == null) return null;
+        var metalMaterial = stack.GetOrCacheMetalMaterial(api);
         Debug.Write(
             $"[CollectibleBehaviorCastToolHead#GetBaseMaterial] {stack.Collectible.Code} -> {metalMaterial?.IngotCode}");
         return metalMaterial?.IngotStack;
@@ -75,8 +89,9 @@ public class CollectibleBehaviorCastToolHead(CollectibleObject collObj) : Collec
 
     public int VoxelCountForHandbook(ItemStack stack)
     {
-        var recipe = stack.GetSingleSmithingRecipe(Api);
-        var voxels = recipe?.Voxels.ToByteArray();
+        var api = Api;
+        if (api == null) return 0;
+        var voxels = stack.GetSingleSmithingRecipe(api)?.Voxels.ToByteArray();
         return voxels?.MaterialCount() ?? 0;
     }
 
@@ -108,21 +123,30 @@ public class CollectibleBehaviorCastToolHead(CollectibleObject collObj) : Collec
                 : Lang.Get($"{Core.ModId}:itemdesc-temp-always")));
     }
 
+    /// <summary>
+    ///     The temperature at which the cast head becomes workable: the ingot's stated
+    ///     <c>workableTemperature</c> if it has one, otherwise half the melting point.
+    ///     <para>
+    ///         The stated value is read first so the melting point is only queried when it will be used.
+    ///         This runs per frame while the item's tooltip is open.
+    ///     </para>
+    /// </summary>
     private float GetWorkableTemperature(ItemStack itemStack)
     {
-        var metalIngot = itemStack.GetOrCacheMetalMaterial(Api)?.IngotItem;
-        var querySlot = new DummySlot(itemStack);
+        var api = Api;
+        if (api == null) return 0f;
 
-        var meltingPoint = metalIngot?
-                               .GetMeltingPoint(Api.World, null, querySlot)
-                           ?? itemStack.Collectible
-                               .GetMeltingPoint(Api.World, null, querySlot);
-
-        var defaultWorkableTemp = meltingPoint / 2f;
+        var metalIngot = itemStack.GetOrCacheMetalMaterial(api)?.IngotItem;
         var workableAttr = metalIngot?.Attributes?["workableTemperature"];
+        if (workableAttr?.Exists == true)
+        {
+            var stated = workableAttr.AsFloat(float.NaN);
+            if (!float.IsNaN(stated)) return stated;
+        }
 
-        return workableAttr?.Exists == true
-            ? workableAttr.AsFloat(defaultWorkableTemp)
-            : defaultWorkableTemp;
+        var querySlot = new DummySlot(itemStack);
+        var meltingPoint = metalIngot?.GetMeltingPoint(api.World, null, querySlot)
+                           ?? itemStack.Collectible.GetMeltingPoint(api.World, null, querySlot);
+        return meltingPoint / 2f;
     }
 }

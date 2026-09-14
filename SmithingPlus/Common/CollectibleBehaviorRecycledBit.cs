@@ -9,7 +9,11 @@ namespace SmithingPlus.Common;
 
 public class CollectibleBehaviorRecycledBit(CollectibleObject collObj) : CollectibleBehavior(collObj)
 {
-    private ICoreAPI Api => collObj.GetField<ICoreAPI>("api");
+    private ICoreAPI? _api;
+
+    /// <summary>The API, read once from the collectible's private field and kept; each read is an
+    /// uncached reflection lookup, and this is read per input slot while resolving a craft.</summary>
+    private ICoreAPI? Api => _api ??= collObj.GetLoadedApi();
 
     public override void OnCreatedByCrafting(
         ItemSlot[] allInputSlots,
@@ -22,17 +26,20 @@ public class CollectibleBehaviorRecycledBit(CollectibleObject collObj) : Collect
             allInputSlots == null)
             return;
 
+        var api = Api;
+        if (api == null) return;
+
         // Identify recipe tools from ingredients
         var toolIngredients = byRecipe.RecipeIngredients
             .Where(ing =>
                 ing.ConsumeProperties is { Consume: false, DurabilityCost: > 0 } ||
                 ing?.RecipeAttributes?[ModRecipeAttributes.RecyclingRecipe]?.AsBool() == true)
-            .ToArray() ?? [];
+            .ToArray();
 
         var metalInputSlots = allInputSlots
             .Where(s => s?.Itemstack != null)
             .Where(s => !IsToolStack(s.Itemstack, toolIngredients))
-            .Where(s => s.Itemstack?.GetOrCacheMetalMaterial(Api)?.IngotStack != null)
+            .Where(s => s.Itemstack?.GetOrCacheMetalMaterial(api)?.IngotStack != null)
             .ToList();
 
         if (metalInputSlots.Count == 0) return;
@@ -67,7 +74,7 @@ public class CollectibleBehaviorRecycledBit(CollectibleObject collObj) : Collect
             // Finished smithed item -> get via cheapest smithing recipe to prevent abuse of the mechanic
             else
             {
-                var cheapestRecipe = stack.GetCheapestSmithingRecipe(Api);
+                var cheapestRecipe = stack.GetCheapestSmithingRecipe(api);
                 if (cheapestRecipe is { Output.ResolvedItemStack: not null })
                 {
                     var cheapestOutput = Math.Max(cheapestRecipe.Output.ResolvedItemStack.StackSize, 1);
@@ -77,7 +84,7 @@ public class CollectibleBehaviorRecycledBit(CollectibleObject collObj) : Collect
                 }
             }
 
-            var temp = stack.Collectible.GetTemperature(Api.World, stack);
+            var temp = stack.Collectible.GetTemperature(api.World, stack);
             if (voxelsForThisStack > 0)
                 temperatureAccumulator += temp * voxelsForThisStack;
             totalVoxels += Math.Max(voxelsForThisStack, 0);
@@ -89,7 +96,7 @@ public class CollectibleBehaviorRecycledBit(CollectibleObject collObj) : Collect
         // Scale output stack size by VoxelsPerBit
         var bits = Math.Max((int)(totalVoxels / Core.Config.VoxelsPerBit), 1);
         outputSlot.Itemstack.StackSize = bits;
-        outputSlot.Itemstack.Collectible.SetTemperature(Api.World, outputSlot.Itemstack, temperature);
+        outputSlot.Itemstack.Collectible.SetTemperature(api.World, outputSlot.Itemstack, temperature);
     }
 
     private static bool IsToolStack(ItemStack stack, IRecipeIngredient[] toolIngredients)

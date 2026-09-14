@@ -23,15 +23,46 @@ namespace SmithingPlus;
 public partial class Core : ModSystem
 {
     public const string ModId = "smithingplus";
+
+    // One instance of this mod system is created per side, and in singleplayer both live in the same
+    // process. A single static API field would therefore end up holding whichever side loaded last, and
+    // everything reached through it -- the caches in Core.Cache.cs above all -- would be read and written
+    // across sides. Each side's API is kept separately, and Api hands back the one belonging to the caller.
+    private static ICoreAPI? _clientApi;
+    private static ICoreAPI? _serverApi;
+
+    /// <summary>The side this particular instance was started for.</summary>
+    private EnumAppSide _side;
+
     public static ILogger Logger { get; private set; }
-    public static ICoreAPI Api { get; private set; }
+
+    /// <summary>
+    ///     An API to reach the world through, for the static helpers that hold none of their own.
+    ///     <para>
+    ///         The server's is preferred where both sides are loaded, so that the two do not each get a
+    ///         different answer depending on which loaded last. Anything whose answer differs by side, or
+    ///         that writes to a per-side cache, must take the caller's own API as a parameter rather than
+    ///         read this: use <see cref="ApiFor" /> when all that is available is a world or an entity.
+    ///     </para>
+    /// </summary>
+    public static ICoreAPI Api => _serverApi ?? _clientApi!;
+
+    /// <summary>This mod's API for the side <paramref name="world" /> belongs to.</summary>
+    public static ICoreAPI? ApiFor(IWorldAccessor? world)
+    {
+        if (world == null) return Api;
+        return world.Side == EnumAppSide.Client ? _clientApi ?? _serverApi : _serverApi ?? _clientApi;
+    }
+
     public static Harmony HarmonyInstance { get; private set; }
     public static ServerConfig Config => ConfigLoader.Config;
 
     public override void StartPre(ICoreAPI api)
     {
         Logger = Mod.Logger;
-        Api = api;
+        _side = api.Side;
+        if (_side == EnumAppSide.Client) _clientApi = api;
+        else _serverApi = api;
     }
 
     public override void Start(ICoreAPI api)
@@ -180,11 +211,16 @@ public partial class Core : ModSystem
         HarmonyInstance = null;
     }
 
+    /// <summary>
+    ///     Clears this instance's own side. Each side has its own instance and disposes independently, so
+    ///     clearing both here would leave the surviving side reaching for an API that has been dropped.
+    /// </summary>
     public override void Dispose()
     {
         Unpatch();
-        Logger = null;
-        Api = null;
+        if (_side == EnumAppSide.Client) _clientApi = null;
+        else _serverApi = null;
+        if (_clientApi == null && _serverApi == null) Logger = null;
         base.Dispose();
     }
 }

@@ -17,6 +17,7 @@ public partial class Core
     private const string MetalBitStacksCacheKey = $"{ModId}:metalbitStacks";
     private const string CastableMetalVariantsCacheKey = $"{ModId}:castableMetalVariants";
     internal const string MetalMaterialCacheKey = $"{ModId}:metalMaterial";
+    internal const string MetalMaterialProcessedCacheKey = $"{ModId}:metalMaterialProcessed";
 
     public static Dictionary<int, string> RecipeOutputNameCache =>
         ObjectCacheUtil.GetOrCreate(Api, RecipeOutputNameCacheKey, () => new Dictionary<int, string>());
@@ -27,8 +28,20 @@ public partial class Core
     public static Dictionary<string, SmithingRecipe> ToolToRecipeCache =>
         ObjectCacheUtil.GetOrCreate(Api, ToolToRecipeCacheKey, () => new Dictionary<string, SmithingRecipe>());
 
+    /// <summary>
+    ///     Metal material by collectible code. Stores nulls, so a collectible with no metal is searched for
+    ///     once rather than on every lookup; see <see cref="Util.CacheHelper.GetOrAddNullable{TKey,TValue}" />.
+    /// </summary>
     public static Dictionary<string, MetalMaterial?> MetalMaterialCache =>
         ObjectCacheUtil.GetOrCreate(Api, MetalMaterialCacheKey, () => new Dictionary<string, MetalMaterial?>());
+
+    /// <summary>
+    ///     Metal material of what a collectible smiths into, by collectible code. Separate from
+    ///     <see cref="MetalMaterialCache" />: the same collectible has a different answer in each.
+    /// </summary>
+    public static Dictionary<string, MetalMaterial?> MetalMaterialProcessedCache =>
+        ObjectCacheUtil.GetOrCreate(Api, MetalMaterialProcessedCacheKey,
+            () => new Dictionary<string, MetalMaterial?>());
 
     public static Dictionary<string, ItemStack[]> MoldStacksCache =>
         ObjectCacheUtil.GetOrCreate(Api, MoldStacksCacheKey, () => new Dictionary<string, ItemStack[]>());

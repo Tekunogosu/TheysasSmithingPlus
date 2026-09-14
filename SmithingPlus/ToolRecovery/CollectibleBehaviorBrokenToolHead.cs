@@ -33,13 +33,23 @@ public class CollectibleBehaviorBrokenToolHead(CollectibleObject collObj) : Coll
             () =>
             {
                 Core.Logger.VerboseDebug("Storing recipe output name: {0}", recipeId);
-                return Core.Api.GetSmithingRecipes().FirstOrDefault(r => r.RecipeId == recipeId)?.Output
-                    .ResolvedItemstack.GetName();
+                return FindRecipeById(recipeId)?.Output?.ResolvedItemstack?.GetName();
             });
         dsc.Clear();
         dsc.AppendLine(toolName == null
             ? Lang.Get($"{Core.ModId}:Unknown broken tool part")
             : Lang.Get($"{Core.ModId}:Broken {{0}}", toolName.ToLower()));
+    }
+
+    /// <summary>The smithing recipe with this id, or null. Reached once per id, behind the name cache.</summary>
+    private static SmithingRecipe? FindRecipeById(int recipeId)
+    {
+        var recipes = Core.Api?.GetSmithingRecipes();
+        if (recipes == null) return null;
+        for (var i = 0; i < recipes.Count; i++)
+            if (recipes[i]?.RecipeId == recipeId)
+                return recipes[i];
+        return null;
     }
 
     public override void GetHeldItemInfo(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)

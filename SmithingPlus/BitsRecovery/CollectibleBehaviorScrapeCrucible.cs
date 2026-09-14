@@ -11,6 +11,9 @@ public class CollectibleBehaviorScrapeCrucible(CollectibleObject collObj) : Coll
 {
     public const float MaxScrapeTemperature = 50;
 
+    /// <summary>How long the player holds the interaction to finish a scrape.</summary>
+    private const float ScrapeSeconds = 1.5f;
+
     public override void OnHeldInteractStart(ItemSlot slot, EntityAgent byEntity, BlockSelection? blockSel,
         EntitySelection entitySel,
         bool firstEvent, ref EnumHandHandling handHandling, ref EnumHandling handling)
@@ -18,23 +21,31 @@ public class CollectibleBehaviorScrapeCrucible(CollectibleObject collObj) : Coll
         handling = EnumHandling.PassThrough;
         handHandling = EnumHandHandling.NotHandled;
         if (byEntity is not EntityPlayer entityPlayer) return;
-        if (blockSel?.Position is null) return;
-        // Check if player can access the block
-        if (!CanAccessBlock(entityPlayer, blockSel)) return;
-        if (!IsSelectingValidCrucible(entityPlayer, blockSel)) return;
+        if (!CanScrape(byEntity, blockSel)) return;
         handling = EnumHandling.PreventDefault;
         handHandling = EnumHandHandling.PreventDefault;
         byEntity.World.PlaySoundAt(new AssetLocation("sounds/effect/toolbreak"), entityPlayer, entityPlayer.Player,
             0.3f);
     }
 
+    /// <summary>
+    ///     Holds the interaction for the scrape only while the player is aiming at a crucible they may
+    ///     scrape. Claiming it unconditionally would keep the hold alive for every other use of the tool
+    ///     carrying this behavior, delaying its own interactions by the scrape duration.
+    /// </summary>
     public override bool OnHeldInteractStep(float secondsUsed, ItemSlot slot, EntityAgent byEntity,
         BlockSelection blockSel,
         EntitySelection entitySel, ref EnumHandling handling)
     {
+        if (!CanScrape(byEntity, blockSel))
+        {
+            handling = EnumHandling.PassThrough;
+            return false;
+        }
+
         byEntity.StartAnimation("knifecut");
         handling = EnumHandling.PreventDefault;
-        return secondsUsed < 1.5;
+        return secondsUsed < ScrapeSeconds;
     }
 
     public override void OnHeldInteractStop(float secondsUsed,
@@ -46,6 +57,11 @@ public class CollectibleBehaviorScrapeCrucible(CollectibleObject collObj) : Coll
     {
         handling = EnumHandling.PassThrough;
         byEntity.StopAnimation("knifecut");
+
+        // Leave every other target to the tool's own interactions, rather than marking the stop handled
+        // whatever the player was aiming at.
+        if (!CanScrape(byEntity, blockSel)) return;
+
         if (byEntity.World.Side == EnumAppSide.Server)
         {
             if (byEntity is not EntityPlayer entityPlayer) return;
@@ -106,8 +122,20 @@ public class CollectibleBehaviorScrapeCrucible(CollectibleObject collObj) : Coll
         if (output is null ||
             crucibleStack.Attributes.TryGetInt("units") is < 5)
             return false;
-        Core.Logger.VerboseDebug($"[{nameof(CollectibleBehaviorScrapeCrucible)}] Output: {0}", output.Collectible.Code);
+        Core.Logger.VerboseDebug("[{0}] Output: {1}", nameof(CollectibleBehaviorScrapeCrucible),
+            output.Collectible.Code);
         return true;
+    }
+
+    /// <summary>
+    ///     Whether the entity is a player aiming at a crucible cool enough to scrape and reachable under the
+    ///     world's claim and reinforcement rules. The single condition under which this behavior takes over
+    ///     the held interaction, shared by start, step and stop so the three cannot disagree.
+    /// </summary>
+    private static bool CanScrape(EntityAgent byEntity, BlockSelection? blockSel)
+    {
+        if (byEntity is not EntityPlayer entityPlayer || blockSel?.Position is null) return false;
+        return IsSelectingValidCrucible(entityPlayer, blockSel) && CanAccessBlock(entityPlayer, blockSel);
     }
 
     private static bool IsSelectingValidCrucible(EntityPlayer entityPlayer, BlockSelection blockSel)

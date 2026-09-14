@@ -60,7 +60,7 @@ public class TestCommands : ModSystem
             .EndSub();
         
         command.BeginSub("resetMetalMaterialCache")
-            .WithDescription("Reset the metal material cache.")
+            .WithDescription("Reset the metal material caches and the grid recipe index.")
             .HandleWith(_ => ResetMetalMaterialCache(api))
             .EndSub();
     }
@@ -198,10 +198,18 @@ public class TestCommands : ModSystem
             $"Held item '{heldStack.GetName()}' has metal material {metalMaterial.Code} with ingot {metalMaterial.IngotCode}.");
     }
 
+    /// <summary>
+    ///     Drops everything derived from the recipe list and the collectibles, so the next lookup rebuilds
+    ///     it. The grid recipe index goes with the material caches: it is the source the material lookups
+    ///     fall back to, so resetting them while it stands would refill them from the same stale answers.
+    /// </summary>
     private static TextCommandResult ResetMetalMaterialCache(ICoreServerAPI api)
     {
         ObjectCacheUtil.Delete(api, Core.MetalMaterialCacheKey);
-        return TextCommandResult.Success("Metal material cache has been reset.");
+        ObjectCacheUtil.Delete(api, Core.MetalMaterialProcessedCacheKey);
+        GridRecipeIndex.Invalidate(api);
+        SmithingRecipeIndex.Invalidate(api);
+        return TextCommandResult.Success("Metal material caches and the recipe indexes have been reset.");
     }
 
     private static IServerPlayer GetPlayerByName(ICoreServerAPI api, string playerName)

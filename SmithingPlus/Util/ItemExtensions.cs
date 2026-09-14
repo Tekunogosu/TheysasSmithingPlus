@@ -5,11 +5,14 @@ namespace SmithingPlus.Util;
 
 public static class ItemExtensions
 {
+    /// <summary>
+    ///     The item of the same code with one variant part replaced, or null if there is no such item.
+    ///     The item-typed case of
+    ///     <see cref="CollectibleExtensions.CollectibleWithVariant" />, which resolves the world lookup for
+    ///     either item class.
+    /// </summary>
     public static Item? ItemWithVariant(this Item item, string type, string value)
     {
-        var api = item.GetField<ICoreAPI>("api");
-        if (api != null) return api.World.GetItem(item.CodeWithVariant(type, value));
-        Core.Logger.Error("Reflection failed to get collectible object api field");
-        return null;
+        return item.CollectibleWithVariant(type, value) as Item;
     }
 }

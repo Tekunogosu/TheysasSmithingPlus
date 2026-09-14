@@ -10,11 +10,15 @@ namespace SmithingPlus.Metal;
 [JsonObject(MemberSerialization.OptIn)]
 public class MetalMaterial : IEquatable<MetalMaterial>
 {
-    // These json properties might be null, fallback uses classic vanilla naming conventions
+    // Assigned by Newtonsoft when a metalmaterials.json entry names them, never in code, which is what
+    // CS0649 reports. Each may legitimately be absent, in which case the properties below fall back to the
+    // vanilla naming convention.
+#pragma warning disable CS0649
     [JsonProperty("ingot")] private AssetLocation? _ingotCode;
     [JsonProperty("metalbit")] private AssetLocation? _metalBitCode;
     [JsonProperty("tier")] private int? _tier;
     [JsonProperty("workitem")] private AssetLocation? _workItemCode;
+#pragma warning restore CS0649
     [JsonProperty("code")] public required AssetLocation Code { get; init; }
     public bool Resolved { get; private set; }
     public string Variant => Code.Path;
@@ -24,6 +28,8 @@ public class MetalMaterial : IEquatable<MetalMaterial>
     public ItemIngot? IngotItem { get; private set; }
     public Item? MetalBitItem { get; private set; }
     public ItemWorkItem? WorkItem { get; private set; }
+    // A fresh stack per read, deliberately: callers set stack size and temperature on what they get back,
+    // so handing out a shared instance would let one caller's edits show up in another's stack.
     public ItemStack? IngotStack => IngotItem != null ? new ItemStack(IngotItem) : null;
     public ItemStack? MetalBitStack => MetalBitItem != null ? new ItemStack(MetalBitItem) : null;
     public ItemStack? WorkItemStack => WorkItem != null ? new ItemStack(WorkItem) : null;
@@ -44,17 +50,10 @@ public class MetalMaterial : IEquatable<MetalMaterial>
         MetalBitItem = api.World.GetItem(MetalBitCode);
         WorkItem = api.World.GetItem(WorkItemCode) as ItemWorkItem;
         Tier = _tier ?? GetTier(api);
-        if (IngotItem != null)
-        {
-            Resolved = true;
-        }
-        else
-        {
-            var ingot = api.World.GetItem(new AssetLocation("game:ingot-copper"));
-            Resolved = false;
+        Resolved = IngotItem != null;
+        if (!Resolved)
             api.Logger.Error(
                 $"[MetalMaterial] Failed to resolve ingot item {IngotCode} for metal material {Code}");
-        }
 
         if (MetalBitItem == null)
             api.Logger.Warning(
