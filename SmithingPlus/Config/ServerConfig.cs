@@ -48,6 +48,13 @@ public class ServerConfig
     /// </summary>
     public bool TraceAnvilActions { get; set; } = false;
 
+    /// <summary>
+    ///     Answers a mod asking whether "smithingplus" is enabled with yes, since this fork is SmithingPlus
+    ///     published under a different modid. Turning it off makes mods that integrate with SmithingPlus --
+    ///     Toolsmith among them -- stop doing so. See <see cref="Common.LegacyModIdPatch" />.
+    /// </summary>
+    public bool AnswerToLegacyModId { get; set; } = true;
+
     // public bool StoneSmithing { get; set; } = false;
     [JsonIgnore]
     public string[] GetToolRepairForgettableAttributes =>

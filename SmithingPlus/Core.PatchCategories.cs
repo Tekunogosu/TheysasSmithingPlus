@@ -17,6 +17,7 @@ public partial class Core
     internal const PatchCategory HammerTweaksCategory = "hammerTweaks";
     internal const PatchCategory SkillfulSmithingCategory = "skillfulSmithing";
     internal const PatchCategory AnvilTraceCategory = "anvilTrace";
+    internal const PatchCategory LegacyModIdCategory = "legacyModId";
 
     internal struct ClientTweaksCategories
     {

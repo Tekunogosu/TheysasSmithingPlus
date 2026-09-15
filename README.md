@@ -37,6 +37,21 @@ I created this fork to address many outstanding issues from the main repo which 
 - Fixed a crash and a divide-by-zero when a mold priced itself against a
   malformed smithing recipe.
 
+### Mod id
+
+This fork is published as `smithingplusplus`, because ModDB will not host a mod
+under an id another mod already holds. Nothing else changed: the assets, the
+config file and the data on your saved tools all still use `smithingplus`, so
+existing worlds carry over.
+
+Mods that integrate with SmithingPlus ask the game whether `smithingplus` is
+enabled — Toolsmith gates its entire SmithingPlus compatibility on it — and
+would otherwise be told no. This mod answers that question with yes, since it
+*is* SmithingPlus, and logs a line saying so on startup. Only that question is
+answered; nothing can mistake this for the upstream mod actually being
+installed. Set `AnswerToLegacyModId` to `false` in the config to stop
+answering.
+
 ### Internal
 
 - Replaced LINQ on recipe and item paths with plain loops.

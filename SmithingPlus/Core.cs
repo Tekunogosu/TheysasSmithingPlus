@@ -22,7 +22,27 @@ namespace SmithingPlus;
 [UsedImplicitly(ImplicitUseKindFlags.InstantiatedNoFixedConstructorSignature)]
 public partial class Core : ModSystem
 {
+    /// <summary>
+    ///     The asset domain and the prefix for registered behavior and class names.
+    ///     <para>
+    ///         Deliberately NOT the modid in <c>modinfo.json</c>, which ModDB requires to be unique and so
+    ///         differs. The game takes a mod's asset domain from the folder name under <c>assets/</c> and
+    ///         never compares it to the modid, so this stays as it was: it is baked into every asset path,
+    ///         lang key and registered behavior name, and into the world saves of everyone already running
+    ///         this mod.
+    ///     </para>
+    /// </summary>
     public const string ModId = "smithingplus";
+
+    /// <summary>
+    ///     The modid in <c>modinfo.json</c>, which is what the mod loader knows this mod as. It differs from
+    ///     <see cref="ModId" /> only because ModDB will not host a mod under an id another mod already holds.
+    ///     <para>
+    ///         Mods that integrate with SmithingPlus ask for it by the old id, so see
+    ///         <see cref="Common.LegacyModIdPatch" /> for how that question is answered.
+    ///     </para>
+    /// </summary>
+    public const string PublishedModId = "smithingplusplus";
 
     // One instance of this mod system is created per side, and in singleplayer both live in the same
     // process. A single static API field would therefore end up holding whichever side loaded last, and
@@ -57,12 +77,35 @@ public partial class Core : ModSystem
     public static Harmony HarmonyInstance { get; private set; }
     public static ServerConfig Config => ConfigLoader.Config;
 
+    /// <summary>Guards <see cref="PatchLegacyModId" />, which runs once per side.</summary>
+    private static bool _legacyModIdPatched;
+
+    /// <summary>Guards <see cref="Patch" />, which likewise runs once per side.</summary>
+    private static bool _patched;
+
     public override void StartPre(ICoreAPI api)
     {
         Logger = Mod.Logger;
         _side = api.Side;
         if (_side == EnumAppSide.Client) _clientApi = api;
         else _serverApi = api;
+        PatchLegacyModId();
+    }
+
+    /// <summary>
+    ///     Applied here rather than with the rest of the patches, which run from <see cref="Start" />: a mod
+    ///     asking whether the legacy id is enabled does so in its own <c>Start</c>, and nothing orders that
+    ///     after this mod's. Every <c>StartPre</c> runs before any <c>Start</c>, so this is the last point
+    ///     that is reliably early enough.
+    /// </summary>
+    private static void PatchLegacyModId()
+    {
+        // Harmony applies a category again on a second call rather than ignoring it, and this runs once per
+        // side, so the guard is what keeps the postfix from being installed twice.
+        if (_legacyModIdPatched || !Config.AnswerToLegacyModId) return;
+        _legacyModIdPatched = true;
+        HarmonyInstance ??= new Harmony(ModId);
+        HarmonyInstance.PatchCategory(LegacyModIdCategory);
     }
 
     public override void Start(ICoreAPI api)
@@ -184,8 +227,11 @@ public partial class Core : ModSystem
 
     private static void Patch()
     {
-        if (HarmonyInstance != null) return;
-        HarmonyInstance = new Harmony(ModId);
+        // Tracked by its own flag rather than by HarmonyInstance being null: the instance is also created
+        // in StartPre, for the one patch that has to be applied before any other mod's Start.
+        if (_patched) return;
+        _patched = true;
+        HarmonyInstance ??= new Harmony(ModId);
         Logger.VerboseDebug("Patching...");
         AlwaysPatchCategory.PatchIfEnabled(true);
         ToolRecoveryCategory.PatchIfEnabled(Config.EnableToolRecovery);
@@ -210,6 +256,9 @@ public partial class Core : ModSystem
         Logger?.VerboseDebug("Unpatching...");
         HarmonyInstance?.UnpatchAll(ModId);
         HarmonyInstance = null;
+        // Cleared with the instance they track, or the next load would find them set and patch nothing.
+        _patched = false;
+        _legacyModIdPatched = false;
     }
 
     /// <summary>
