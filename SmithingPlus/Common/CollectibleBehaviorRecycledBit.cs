@@ -74,14 +74,8 @@ public class CollectibleBehaviorRecycledBit(CollectibleObject collObj) : Collect
             // Finished smithed item -> get via cheapest smithing recipe to prevent abuse of the mechanic
             else
             {
-                var cheapestRecipe = stack.GetCheapestSmithingRecipe(api);
-                if (cheapestRecipe is { Output.ResolvedItemStack: not null })
-                {
-                    var cheapestOutput = Math.Max(cheapestRecipe.Output.ResolvedItemStack.StackSize, 1);
-                    var recipeMaterialVoxels = cheapestRecipe.Voxels.VoxelCount();
-                    var voxelsPerItem = Math.Max(recipeMaterialVoxels / cheapestOutput, 0);
-                    voxelsForThisStack = voxelsPerItem * consumedStackSize;
-                }
+                // Priced by what the recipe consumes, not by what the slot holds.
+                voxelsForThisStack = (stack.VoxelCostPerItem(api) ?? 0) * consumedStackSize;
             }
 
             var temp = stack.Collectible.GetTemperature(api.World, stack);

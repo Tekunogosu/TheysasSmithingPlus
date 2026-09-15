@@ -1,7 +1,6 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using HarmonyLib;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
@@ -93,12 +92,7 @@ public class ToolMoldUnitsPatch
 
     private static int? VoxelCountForStack(ICoreAPI api, ItemStack stack)
     {
-        var cheapestRecipe = stack.GetCheapestSmithingRecipe(api);
-        if (cheapestRecipe == null) return null;
-        var cheapestOutput = cheapestRecipe.Output.ResolvedItemstack.StackSize;
-        var recipeMaterialVoxels = cheapestRecipe.Voxels.VoxelCount();
-        var voxelsPerItem = Math.Max(recipeMaterialVoxels / cheapestOutput, 0);
-        return voxelsPerItem * stack.StackSize;
+        return stack.VoxelCostPerItem(api) * stack.StackSize;
     }
 
     private static ItemStack[] GetMoldedStacksStatic(ICoreAPI api, Block toolMold, ItemStack fromMetal)

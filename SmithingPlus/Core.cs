@@ -201,6 +201,7 @@ public partial class Core : ModSystem
         DynamicMoldsCategory.PatchIfEnabled(Config.DynamicMoldUnits);
         BitSmithingCategory.PatchIfEnabled(Config.SmithWithBits || Config.BitsTopUp);
         HammerTweaksCategory.PatchIfEnabled(Config.HammerTweaks);
+        AnvilTraceCategory.PatchIfEnabled(Config.TraceAnvilActions);
         //StoneSmithingCategory.PatchIfEnabled(true);
     }
 

@@ -1,10 +1,9 @@
+#nullable enable
 using System.Linq;
 using HarmonyLib;
 using JetBrains.Annotations;
-using SmithingPlus.Common.Metal;
 using SmithingPlus.Util;
 using Vintagestory.API.Common;
-using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Datastructures;
 using Vintagestory.GameContent;
 
@@ -52,65 +51,7 @@ public class ItemDamagedPatches
             outputAttributes[attribute.Key] = attribute.Value;
     }
 
-    [HarmonyPrefix]
-    [HarmonyPatch(nameof(CollectibleObject.DamageItem))]
-    private static void Prefix_DamageItem(
-        IWorldAccessor world,
-        Entity byEntity,
-        ItemSlot itemSlot,
-        int amount = 1,
-        bool destroyOnZeroDurability = true)
-    {
-        if (world.Api.Side.IsClient())
-            return;
-        if (!destroyOnZeroDurability)
-            return;
-        var durability = itemSlot?.Itemstack?.GetRemainingDurability();
-        if (!durability.HasValue || durability > amount) return;
-        if (itemSlot.Itemstack?.Collectible.HasBehavior<CollectibleBehaviorRepairableTool>() != true) return;
-        Core.Logger.VerboseDebug("Broken tool in InventoryID: {0}, Entity: {1}", itemSlot.Inventory?.InventoryID,
-            byEntity.GetName());
-        var entityPlayer = byEntity as EntityPlayer;
-        var itemStack = itemSlot.Itemstack;
-        var toolCode = itemStack?.Collectible.Code.ToString();
-        var smithingRecipe = CacheHelper.GetOrAdd(Core.ToolToRecipeCache, toolCode,
-            () => GetHeadSmithingRecipe(world.Api, itemStack));
-        if (smithingRecipe == null)
-        {
-            Core.Logger.VerboseDebug("Head or tool smithing recipe not found for: {0}", toolCode);
-            return;
-        }
-
-        var metalMaterial = itemStack?.GetOrCacheMetalMaterial(byEntity.Api);
-        var workItem = metalMaterial?.WorkItem;
-        if (workItem is null)
-        {
-            Core.Logger.VerboseDebug(
-                $"Work item not found. Metal material: {metalMaterial?.IngotCode}, " +
-                $"collectible: {itemStack?.Collectible.Code}");
-            return;
-        }
-
-        Core.Logger.VerboseDebug("Found work item: {0}", workItem.Code);
-        var wItemStack = new ItemStack(workItem);
-        Core.Logger.VerboseDebug("Found smithing recipe: {0}",
-            smithingRecipe.Output.ResolvedItemstack.Collectible.Code);
-        var byteVoxels = ByteVoxelsFromRecipe(smithingRecipe, smithingRecipe.Output.ResolvedItemstack.StackSize);
-        wItemStack.Attributes.SetBytes("voxels", BlockEntityAnvil.serializeVoxels(byteVoxels));
-        wItemStack.Attributes.SetInt("selectedRecipeId", smithingRecipe.RecipeId);
-        var cloneStack = itemStack?.Clone();
-        cloneStack.CloneBrokenCount(itemStack, 1);
-        wItemStack.SetRepairedToolStack(cloneStack);
-
-        var gaveStack = false;
-        if (entityPlayer != null) gaveStack = entityPlayer.TryGiveItemStack(wItemStack);
-        if (!gaveStack) world.SpawnItemEntity(wItemStack, byEntity.Pos.XYZ);
-        Core.Logger.VerboseDebug(gaveStack ? "Gave work item {0} to player {1}" : "Dropped work item {0} to player {1}",
-            wItemStack.Collectible.Code, entityPlayer?.Player.PlayerName);
-        itemSlot.MarkDirty();
-    }
-
-    private static SmithingRecipe GetHeadSmithingRecipe(ICoreAPI api, ItemStack itemStack)
+    internal static SmithingRecipe? GetHeadSmithingRecipe(ICoreAPI api, ItemStack itemStack)
     {
         var toolHead = GetToolHead(api, itemStack);
         var smithingRecipe = toolHead.GetSmithingRecipe(api);
@@ -121,7 +62,7 @@ public class ItemDamagedPatches
     ///     The tool head this item is crafted from: the repairable-tool-head ingredient of the first grid
     ///     recipe producing a single one of it. Falls back to the item itself when there is no such recipe.
     /// </summary>
-    private static ItemStack GetToolHead(ICoreAPI api, ItemStack itemStack)
+    internal static ItemStack GetToolHead(ICoreAPI api, ItemStack itemStack)
     {
         var toolHead = FindToolHead(api, itemStack);
         if (toolHead == null)
@@ -158,14 +99,13 @@ public class ItemDamagedPatches
         return null;
     }
 
-    private static byte[,,] ByteVoxelsFromRecipe(SmithingRecipe recipe, int stackSize = 1)
+    internal static byte[,,] ByteVoxelsFromRecipe(SmithingRecipe recipe, int stackSize = 1)
     {
         var recipeVoxels = recipe.Voxels;
         if (Core.Config.BrokenToolVoxelPercent < 0.2)
             Core.Logger.Warning(
                 $"[ItemDamagedPatches#ByteVoxelsFromRecipe] Config setting {nameof(Core.Config.BrokenToolVoxelPercent)}" +
                 $"has a very low value, your broken tools well be almost or fully empty.");
-        ;
         var byteVoxels = recipeVoxels.ErodeToPercentage(Core.Config.BrokenToolVoxelPercent);
         return byteVoxels;
     }

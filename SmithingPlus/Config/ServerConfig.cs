@@ -42,6 +42,12 @@ public class ServerConfig
     public bool HandbookExtraInfo { get; set; } = true;
     public int AnvilRecipeSelectionColumns { get; set; } = 8;
 
+    /// <summary>
+    ///     Logs every anvil action, on both sides, for tracking down actions that appear to happen twice.
+    ///     Noisy by design; leave it off unless chasing that.
+    /// </summary>
+    public bool TraceAnvilActions { get; set; } = false;
+
     // public bool StoneSmithing { get; set; } = false;
     [JsonIgnore]
     public string[] GetToolRepairForgettableAttributes =>

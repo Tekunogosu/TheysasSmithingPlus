@@ -1,4 +1,5 @@
 #nullable enable
+using System;
 using Vintagestory.API.Common;
 using Vintagestory.GameContent;
 
@@ -58,7 +59,30 @@ public static class SmithingRecipeLookups
     /// </summary>
     public static SmithingRecipe? GetCheapestSmithingRecipe(this ItemStack toolHead, ICoreAPI api)
     {
-        return toolHead.HighestScoring(api, static (r, output) => r.Voxels.VoxelCount() / output.StackSize);
+        return toolHead.HighestScoring(api,
+            static (r, output) => r.Voxels.VoxelCount() / Math.Max(output.StackSize, 1));
+    }
+
+    /// <summary>
+    ///     The material voxels one of <paramref name="toolHead" />'s items is worth, or null when no smithing
+    ///     recipe prices it.
+    ///     <para>
+    ///         Priced through the cheapest recipe, so the answer is the one a player gains least by going
+    ///         through; see <see cref="GetCheapestSmithingRecipe" />. Callers wanting the whole stack multiply
+    ///         by the stack size they are actually consuming, which is not always
+    ///         <see cref="ItemStack.StackSize" /> -- a crafting ingredient consumes only what the recipe asks
+    ///         for.
+    ///     </para>
+    /// </summary>
+    public static int? VoxelCostPerItem(this ItemStack toolHead, ICoreAPI api)
+    {
+        var cheapestRecipe = toolHead.GetCheapestSmithingRecipe(api);
+        var output = cheapestRecipe?.Output?.ResolvedItemstack;
+        if (cheapestRecipe == null || output == null) return null;
+        // A recipe declaring a zero-sized output would divide by zero; it is a malformed recipe rather than
+        // a free one, so it prices as a single item.
+        var outputStackSize = Math.Max(output.StackSize, 1);
+        return Math.Max(cheapestRecipe.Voxels.VoxelCount() / outputStackSize, 0);
     }
 
     /// <summary>
@@ -66,6 +90,7 @@ public static class SmithingRecipeLookups
     ///     Ties go to the earliest in registry order, as the ordering these replaced did.
     /// </summary>
     private static SmithingRecipe? HighestScoring(this ItemStack toolHead, ICoreAPI api,
+        // Qualified: Vintagestory.API.Common declares its own Func, so the unqualified name is ambiguous.
         System.Func<SmithingRecipe, ItemStack, int> score)
     {
         var recipes = api.GetSmithingRecipes();

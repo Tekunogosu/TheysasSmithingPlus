@@ -25,8 +25,12 @@ public partial class Core
     public static Dictionary<int, int> RecipeVoxelCountCache =>
         ObjectCacheUtil.GetOrCreate(Api, RecipeVoxelCountCacheKey, () => new Dictionary<int, int>());
 
-    public static Dictionary<string, SmithingRecipe> ToolToRecipeCache =>
-        ObjectCacheUtil.GetOrCreate(Api, ToolToRecipeCacheKey, () => new Dictionary<string, SmithingRecipe>());
+    /// <summary>
+    ///     Head smithing recipe by tool code. Stores nulls, so a tool with no such recipe is searched for
+    ///     once rather than on every break; see <see cref="Util.CacheHelper.GetOrAddNullable{TKey,TValue}" />.
+    /// </summary>
+    public static Dictionary<string, SmithingRecipe?> ToolToRecipeCache =>
+        ObjectCacheUtil.GetOrCreate(Api, ToolToRecipeCacheKey, () => new Dictionary<string, SmithingRecipe?>());
 
     /// <summary>
     ///     Metal material by collectible code. Stores nulls, so a collectible with no metal is searched for

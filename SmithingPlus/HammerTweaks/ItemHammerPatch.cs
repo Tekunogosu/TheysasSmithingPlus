@@ -19,6 +19,9 @@ public static class ItemHammerPatch
 {
     private const string ToolModeCacheKey = $"{Core.ModId}:extraHammerToolModes";
 
+    /// <summary>Code of the tool mode this mod appends, used to find it again by identity.</summary>
+    private const string FlipToolModeCode = "flip";
+
     [HarmonyPostfix]
     [HarmonyPatch(nameof(ItemHammer.GetToolModes))]
     [HarmonyPriority(Priority.Last)]
@@ -32,10 +35,18 @@ public static class ItemHammerPatch
             if (__result is null || slot.Itemstack is null) return;
             if (___toolModes is not null)
             {
-                var originalToolModesCount = HammerTweaksNetwork.OriginalToolModesCount ??= ___toolModes.Length;
-                // Store original tool modes count
-                slot.Itemstack.TempAttributes.SetInt(ModTempAttributes.FlipItemToolMode, originalToolModesCount);
-                // Sync attribute the server
+                // Where "flip" sits is the number of modes that existed before this mod appended it. Counted
+                // from the array each time rather than latched into a static: the static kept the first
+                // count it ever saw for the life of the process, so a hammer whose mode list differed -- or
+                // a second world joined in the same session -- was measured against a stale number.
+                var originalToolModesCount = OriginalToolModeCount(___toolModes);
+
+                // The index the server must agree on, recorded on the stack itself so it travels with the
+                // hammer, and sent so the server has it before the first strike. TempAttributes were used
+                // for this and are neither saved nor synchronized, so the server could be reading a value
+                // that had silently reverted to 0 -- a valid mode index -- and treat an ordinary hit as a
+                // flip, or the reverse.
+                slot.Itemstack.Attributes.SetInt(ModStackAttributes.FlipToolModeIndex, originalToolModesCount);
                 HammerTweaksNetwork.SendFlipToolMode(capi, originalToolModesCount);
                 if (Core.Config.RotationRequiresTongs && !forPlayer.HasHeatResistantHandGear())
                 {
@@ -56,6 +67,19 @@ public static class ItemHammerPatch
         {
             Core.Logger.Error(ex);
         }
+    }
+
+    /// <summary>
+    ///     How many modes the hammer had before this mod appended its own, which is the index "flip" lands
+    ///     at. Found by looking for a mode this mod added rather than by remembering a count, so calling it
+    ///     again on an already-extended list returns the same answer instead of growing.
+    /// </summary>
+    private static int OriginalToolModeCount(SkillItem[] toolModes)
+    {
+        for (var i = 0; i < toolModes.Length; i++)
+            if (toolModes[i]?.Code?.Path == FlipToolModeCode)
+                return i;
+        return toolModes.Length;
     }
 
     private static SkillItem[] ClearExtraToolModes(ItemHammer itemHammer, ItemSlot slot, IPlayer forPlayer,
@@ -82,7 +106,7 @@ public static class ItemHammerPatch
         {
             new SkillItem
             {
-                Code = new AssetLocation("flip"),
+                Code = new AssetLocation(FlipToolModeCode),
                 Name = Lang.Get("Flip")
             }.WithIcon(capi, DrawFlipSvg)
         });

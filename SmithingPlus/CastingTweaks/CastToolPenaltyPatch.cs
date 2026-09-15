@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using HarmonyLib;
 using JetBrains.Annotations;
 using SmithingPlus.Util;
@@ -38,14 +37,18 @@ public class CastToolPenaltyPatch
     {
         if (outputSlot.Itemstack == null)
             return;
-        var castToolsHeads = allInputSlots
-            .Where(slot => !slot.Empty)
-            .Select(slot => slot.Itemstack)
-            .Where(stack =>
-                stack?.Attributes?.GetBool(ModStackAttributes.CastTool) == true &&
-                stack.Collectible.GetMaxDurability(stack) == 1)
-            .ToArray();
-        var hasCastToolHead = castToolsHeads.Any();
+        // Short-circuits on the first cast head: only whether one is present matters, so the matches are
+        // never collected.
+        var hasCastToolHead = false;
+        for (var i = 0; i < allInputSlots.Length; i++)
+        {
+            var stack = allInputSlots[i]?.Itemstack;
+            if (stack?.Attributes?.GetBool(ModStackAttributes.CastTool) != true) continue;
+            if (stack.Collectible.GetMaxDurability(stack) != 1) continue;
+            hasCastToolHead = true;
+            break;
+        }
+
         if (!hasCastToolHead) return;
         outputSlot.Itemstack.Attributes ??= new TreeAttribute();
         outputSlot.Itemstack.Attributes.SetBool(ModStackAttributes.CastTool, true);

@@ -4,6 +4,7 @@ using SmithingPlus.Util;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Server;
+using Vintagestory.GameContent;
 
 namespace SmithingPlus.HammerTweaks;
 
@@ -11,11 +12,6 @@ namespace SmithingPlus.HammerTweaks;
 public class HammerTweaksNetwork : ModSystem
 {
     private const string ChannelName = $"{Core.ModId}:{Core.HammerTweaksCategory}";
-
-    /// <summary>
-    ///     Always null on servers, stores the original tool modes count for the client.
-    /// </summary>
-    public static int? OriginalToolModesCount { get; set; }
 
     public override bool ShouldLoad(ICoreAPI api)
     {
@@ -37,7 +33,6 @@ public class HammerTweaksNetwork : ModSystem
     public override void Dispose()
     {
         ClientChannel = null;
-        OriginalToolModesCount = null;
         base.Dispose();
     }
 
@@ -75,10 +70,20 @@ public class HammerTweaksNetwork : ModSystem
             .SetMessageHandler<FlipToolModePacket>(ReceiveFlipToolMode);
     }
 
+    /// <summary>
+    ///     Records which mode index means "flip" on the server's copy of the hammer.
+    ///     <para>
+    ///         Only a hammer is written to. The packet names no slot, so it lands on whatever the player is
+    ///         holding when it arrives; without this check, switching hotbar slots between opening the tool
+    ///         mode menu and the packet arriving stamped the index onto an unrelated item.
+    ///     </para>
+    /// </summary>
     private static void ReceiveFlipToolMode(IServerPlayer fromPlayer, FlipToolModePacket packet)
     {
-        var activeSlot = fromPlayer.InventoryManager.ActiveHotbarSlot;
-        activeSlot?.Itemstack?.TempAttributes.SetInt(ModTempAttributes.FlipItemToolMode, packet.ToolMode);
+        var stack = fromPlayer.InventoryManager?.ActiveHotbarSlot?.Itemstack;
+        if (stack?.Collectible is not ItemHammer) return;
+        if (packet.ToolMode < 0) return;
+        stack.Attributes.SetInt(ModStackAttributes.FlipToolModeIndex, packet.ToolMode);
     }
 
     #endregion

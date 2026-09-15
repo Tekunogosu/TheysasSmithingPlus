@@ -40,14 +40,12 @@ public class ConfigLoader : ModSystem
         api.World.Config.SetBool("SmithingPlus_CanRepairForlornHopeEstoc", Config.CanRepairForlornHopeEstoc);
         api.World.Config.SetBool("SmithingPlus_WorkableBits", Config.SmithWithBits || Config.EnableToolRecovery);
         if (Config.BrokenToolVoxelPercent < 0.2)
-            Mod.Logger.Warning($"[{nameof(ConfigLoader)}] Config setting {nameof(Config.BrokenToolVoxelPercent)}" +
-                               $"has a very low value, your broken tools well be almost or fully empty.");
-        ;
+            Mod.Logger.Warning($"[{nameof(ConfigLoader)}] Config setting {nameof(Config.BrokenToolVoxelPercent)} " +
+                               "has a very low value, your broken tools will be almost or fully empty.");
         if (Config.VoxelsPerBit is < 2 or > 3)
         {
-            Mod.Logger.Warning($"[{nameof(ConfigLoader)}] Config setting {nameof(Config.VoxelsPerBit)}" +
-                               $"requires a value between 2 and 3. Clamping value.");
-            ;
+            Mod.Logger.Warning($"[{nameof(ConfigLoader)}] Config setting {nameof(Config.VoxelsPerBit)} " +
+                               "requires a value between 2 and 3. Clamping value.");
             Config.VoxelsPerBit = Math.Clamp(Config.VoxelsPerBit, 2, 3);
         }
     }

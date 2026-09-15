@@ -7,11 +7,6 @@ public static class Constants
     internal const string Sp = "sp";
 }
 
-public static class ModTempAttributes
-{
-    internal const string FlipItemToolMode = $"{Constants.Sp}:flipItemToolMode";
-}
-
 public static class ModStackAttributes
 {
     // Tool and tool head attributes
@@ -23,6 +18,11 @@ public static class ModStackAttributes
 
     // Tool head attributes
     internal const string RepairedToolStack = "repairedToolStack";
+
+    // Hammer attributes. Kept on the stack rather than in TempAttributes: the client and the server both
+    // read this to decide whether a click is a flip or an ordinary strike, and TempAttributes are neither
+    // saved nor synchronized, so the two sides could disagree and act on the same click differently.
+    internal const string FlipToolModeIndex = $"{Constants.Sp}:flipToolModeIndex";
 
     // Work item attributes
     internal const string SplitCount = $"{Constants.Sp}:splitCount";

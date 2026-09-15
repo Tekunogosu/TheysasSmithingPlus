@@ -13,7 +13,7 @@ using Vintagestory.GameContent;
 namespace SmithingPlus.Test;
 
 [UsedImplicitly(ImplicitUseKindFlags.InstantiatedNoFixedConstructorSignature)]
-public class TestCommands : ModSystem
+public partial class TestCommands : ModSystem
 {
     public override bool ShouldLoad(EnumAppSide forSide)
     {
@@ -63,6 +63,8 @@ public class TestCommands : ModSystem
             .WithDescription("Reset the metal material caches and the grid recipe index.")
             .HandleWith(_ => ResetMetalMaterialCache(api))
             .EndSub();
+
+        RegisterDurabilityCommands(api, command);
     }
 
     private static TextCommandResult GiveCrucible(TextCommandCallingArgs args)
@@ -102,44 +104,22 @@ public class TestCommands : ModSystem
         var attributeValue = bool.Parse(args[1] as string ?? string.Empty);
         if (string.IsNullOrEmpty(attributeKey) || string.IsNullOrEmpty(args[1] as string))
             return TextCommandResult.Error("Attribute key or value is missing.");
-        var playerName = args[2] as string;
-        IServerPlayer targetPlayer;
-        if (string.IsNullOrEmpty(playerName))
-        {
-            targetPlayer = args.Caller.Player as IServerPlayer;
-        }
-        else
-        {
-            targetPlayer = GetPlayerByName(api, playerName);
-            if (targetPlayer == null) return TextCommandResult.Error($"Player '{playerName}' not found.");
-        }
-
-        if (targetPlayer == null) return TextCommandResult.Error("Player not found.");
-        var heldStack = targetPlayer.InventoryManager.ActiveHotbarSlot.Itemstack;
-        if (heldStack == null) return TextCommandResult.Error($"Player '{targetPlayer.PlayerName}' has no held item.");
+        var resolved = ResolveHeldStack(api, args[2] as string, args);
+        if (resolved.Error != null) return resolved.Error;
+        var targetPlayer = resolved.Player;
+        var heldStack = resolved.Stack;
         heldStack.Attributes.SetBool(attributeKey, attributeValue);
-        targetPlayer.InventoryManager.ActiveHotbarSlot.MarkDirty();
+        resolved.Slot.MarkDirty();
         return TextCommandResult.Success(
             $"Set held stack attribute {attributeKey} to value {attributeValue} for player '{targetPlayer.PlayerName}'.");
     }
 
     private static TextCommandResult OnCompleteHeldWorkitemCommand(ICoreServerAPI api, TextCommandCallingArgs args)
     {
-        var playerName = args[0] as string;
-        IServerPlayer targetPlayer;
-        if (string.IsNullOrEmpty(playerName))
-        {
-            targetPlayer = args.Caller.Player as IServerPlayer;
-        }
-        else
-        {
-            targetPlayer = GetPlayerByName(api, playerName);
-            if (targetPlayer == null) return TextCommandResult.Error($"Player '{playerName}' not found.");
-        }
-
-        if (targetPlayer == null) return TextCommandResult.Error("Player not found.");
-        var heldStack = targetPlayer.InventoryManager.ActiveHotbarSlot.Itemstack;
-        if (heldStack == null) return TextCommandResult.Error($"Player '{targetPlayer.PlayerName}' has no held item.");
+        var resolved = ResolveHeldStack(api, args[0] as string, args);
+        if (resolved.Error != null) return resolved.Error;
+        var targetPlayer = resolved.Player;
+        var heldStack = resolved.Stack;
         if (heldStack.Collectible is not ItemWorkItem)
             return TextCommandResult.Error($"Player '{targetPlayer.PlayerName}' is not holding a work item.");
         var selectedRecipe = api.GetSmithingRecipes().FirstOrDefault(r =>
@@ -155,19 +135,8 @@ public class TestCommands : ModSystem
 
     private static TextCommandResult OnGetSmithingQualityCommand(ICoreServerAPI api, TextCommandCallingArgs args)
     {
-        var playerName = args[0] as string;
-        IServerPlayer targetPlayer;
-        if (string.IsNullOrEmpty(playerName))
-        {
-            targetPlayer = args.Caller.Player as IServerPlayer;
-        }
-        else
-        {
-            targetPlayer = GetPlayerByName(api, playerName);
-            if (targetPlayer == null) return TextCommandResult.Error($"Player '{playerName}' not found.");
-        }
-
-        if (targetPlayer == null) return TextCommandResult.Error("Player not found.");
+        var targetPlayer = ResolvePlayer(api, args[0] as string, args, out var error);
+        if (error != null) return error;
         var smithingQuality = targetPlayer.Entity.Stats.GetBlended("sp:smithingQuality");
         return TextCommandResult.Success(
             $"Smithing quality for player '{targetPlayer.PlayerName}' is {smithingQuality}.");
@@ -176,21 +145,9 @@ public class TestCommands : ModSystem
 
     private static TextCommandResult OnGetMetalMaterialCommand(ICoreServerAPI api, TextCommandCallingArgs args)
     {
-        var playerName = args[0] as string;
-        IServerPlayer targetPlayer;
-        if (string.IsNullOrEmpty(playerName))
-        {
-            targetPlayer = args.Caller.Player as IServerPlayer;
-        }
-        else
-        {
-            targetPlayer = GetPlayerByName(api, playerName);
-            if (targetPlayer == null) return TextCommandResult.Error($"Player '{playerName}' not found.");
-        }
-
-        if (targetPlayer == null) return TextCommandResult.Error("Player not found.");
-        var heldStack = targetPlayer.InventoryManager.ActiveHotbarSlot.Itemstack;
-        if (heldStack == null) return TextCommandResult.Error($"Player '{targetPlayer.PlayerName}' has no held item.");
+        var resolved = ResolveHeldStack(api, args[0] as string, args);
+        if (resolved.Error != null) return resolved.Error;
+        var heldStack = resolved.Stack;
         var metalMaterial = heldStack.Collectible.GetOrCacheMetalMaterial(api);
         if (metalMaterial == null)
             return TextCommandResult.Error($"Held item '{heldStack.GetName()}' is not a metal item.");
@@ -217,5 +174,55 @@ public class TestCommands : ModSystem
         return api.World.AllOnlinePlayers
             .Cast<IServerPlayer>()
             .FirstOrDefault(player => player.PlayerName.Equals(playerName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    ///     A resolved target for a command that acts on someone's held item: the named player's, or the
+    ///     caller's when no name was given. <see cref="Error" /> is set when there is nothing to act on, and
+    ///     is the result the handler should return.
+    /// </summary>
+    private readonly struct HeldStack
+    {
+        public TextCommandResult Error { get; init; }
+        public IServerPlayer Player { get; init; }
+        public ItemSlot Slot { get; init; }
+        public ItemStack Stack { get; init; }
+    }
+
+    /// <summary>
+    ///     The named player, or the caller when no name is given. <paramref name="error" /> is set, and the
+    ///     return is null, when neither resolves.
+    /// </summary>
+    private static IServerPlayer ResolvePlayer(ICoreServerAPI api, string playerName, TextCommandCallingArgs args,
+        out TextCommandResult error)
+    {
+        error = null;
+        if (!string.IsNullOrEmpty(playerName))
+        {
+            var named = GetPlayerByName(api, playerName);
+            if (named == null) error = TextCommandResult.Error($"Player '{playerName}' not found.");
+            return named;
+        }
+
+        if (args.Caller.Player is IServerPlayer caller) return caller;
+        error = TextCommandResult.Error("Player not found.");
+        return null;
+    }
+
+    /// <summary>The named player's held item, or the caller's when no name is given.</summary>
+    private static HeldStack ResolveHeldStack(ICoreServerAPI api, string playerName, TextCommandCallingArgs args)
+    {
+        var targetPlayer = ResolvePlayer(api, playerName, args, out var error);
+        if (error != null) return new HeldStack { Error = error };
+
+        var slot = targetPlayer.InventoryManager.ActiveHotbarSlot;
+        var heldStack = slot?.Itemstack;
+        if (slot == null || heldStack == null)
+            return new HeldStack
+            {
+                Error = TextCommandResult.Error($"Player '{targetPlayer.PlayerName}' has no held item.")
+            };
+
+        return new HeldStack { Player = targetPlayer, Slot = slot, Stack = heldStack };
     }
 }

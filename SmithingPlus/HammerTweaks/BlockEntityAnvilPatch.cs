@@ -41,7 +41,14 @@ public static class BlockEntityAnvilPatch
         var itemStack = activeSlot.Itemstack;
         if (itemStack?.Collectible is not ItemHammer itemHammer)
             return true;
-        var flipItemToolMode = itemStack.TempAttributes.GetInt(ModTempAttributes.FlipItemToolMode);
+
+        // Only a hammer that has actually been told where "flip" sits can flip. Reading a plain int would
+        // make an unrecorded index read as 0, which is a real mode -- the first one -- so a side that never
+        // learned the index would treat an ordinary heavy hit as a flip while the other side hammered,
+        // and one click would produce two different actions.
+        if (!itemStack.Attributes.HasAttribute(ModStackAttributes.FlipToolModeIndex))
+            return true;
+        var flipItemToolMode = itemStack.Attributes.GetInt(ModStackAttributes.FlipToolModeIndex);
         if (itemHammer.GetToolMode(activeSlot, byPlayer, blockSel) != flipItemToolMode)
             return true;
         if (byPlayer.Entity.Controls.ShiftKey)
