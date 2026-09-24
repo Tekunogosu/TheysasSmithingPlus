@@ -9,12 +9,16 @@
 #   testbed-client.sh [connect]   build, install, launch, connect to localhost
 #   testbed-client.sh solo        launch and open a local world instead
 #   testbed-client.sh menu        launch and stop at the main menu
+#
+#   --no-install  anywhere on the line: skip building and installing the mod,
+#                 and run the copy already in the testbed's Mods folder
 
 set -euo pipefail
 . "$(dirname "$(readlink -f "$0")")/common.sh"
+parse_args "$@"
 
 HOST="${SMITHINGPLUS_HOST:-localhost:$TESTBED_PORT}"
-MODE="${1:-connect}"
+MODE="${ARGS[0]:-connect}"
 
 # Takes the real install's settings, credentials included, and points the copy
 # at the testbed's own folders.
@@ -82,12 +86,12 @@ case "$MODE" in
 	connect) args=(--connect "$HOST") ;;
 	solo)    args=(--openWorld smithingplus) ;;
 	menu)    args=() ;;
-	*)       die "usage: $(basename "$0") {connect|solo|menu}" ;;
+	*)       die "usage: $(basename "$0") [--no-install] {connect|solo|menu}" ;;
 esac
 
 mkdir -p "$CLIENT_DATA"
 sync_settings
-install_mod "$CLIENT_DATA"
+install_or_keep_mod "$CLIENT_DATA"
 install_extra_mods "$CLIENT_DATA"
 install_toolsmith "$CLIENT_DATA"
 

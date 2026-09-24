@@ -8,9 +8,13 @@
 #   testbed-server.sh stop      stop one running in another terminal
 #   testbed-server.sh logs      tail the last server log
 #   testbed-server.sh status    is a testbed server running?
+#
+#   --no-install  anywhere on the line: skip building and installing the mod,
+#                 and run the copy already in the testbed's Mods folder
 
 set -euo pipefail
 . "$(dirname "$(readlink -f "$0")")/common.sh"
+parse_args "$@"
 
 WORLD="$SERVER_DATA/Saves/smithingplus.vcdbs"
 CONFIG="$SERVER_DATA/serverconfig.json"
@@ -94,7 +98,7 @@ stop_running() {
 	die "the previous testbed server would not stop; kill it by hand and retry"
 }
 
-case "${1:-start}" in
+case "${ARGS[0]:-start}" in
 	start) ;;
 	wipe|wipe-all) stop_running ;;&
 	wipe)
@@ -134,7 +138,7 @@ case "${1:-start}" in
 		exit 0
 		;;
 	*)
-		die "usage: $(basename "$0") {start|stop|wipe|wipe-all|logs|status}"
+		die "usage: $(basename "$0") [--no-install] {start|stop|wipe|wipe-all|logs|status}"
 		;;
 esac
 
@@ -147,7 +151,7 @@ stop_running
 
 seed_config
 enforce_port
-install_mod "$SERVER_DATA"
+install_or_keep_mod "$SERVER_DATA"
 install_extra_mods "$SERVER_DATA"
 install_toolsmith "$SERVER_DATA"
 

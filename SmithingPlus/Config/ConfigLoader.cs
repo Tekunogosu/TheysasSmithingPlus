@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -18,7 +19,8 @@ public class ConfigLoader : ModSystem
     /// <summary>
     ///     World config key the server publishes its whole config under. World config is the one channel that
     ///     reaches the client before its <c>StartPre</c>, which is where patches are chosen and behaviors
-    ///     attached; a network message would only arrive after both.
+    ///     attached; a network message would only arrive after both. The value is Base64, see
+    ///     <see cref="EncodeForWorldConfig" />.
     /// </summary>
     private const string ServerConfigKey = "SmithingPlus_ServerConfig";
 
@@ -45,7 +47,7 @@ public class ConfigLoader : ModSystem
         // Written by the server alone: the client receives the server's world config, and writing there
         // from the client would replace the server's values with its own.
         if (api.Side != EnumAppSide.Server) return;
-        api.World.Config.SetString(ServerConfigKey, JsonConvert.SerializeObject(Config));
+        api.World.Config.SetString(ServerConfigKey, EncodeForWorldConfig(Config));
         api.World.Config.SetBool("SmithingPlus_CanRepairForlornHopeEstoc", Config.CanRepairForlornHopeEstoc);
         api.World.Config.SetBool("SmithingPlus_WorkableBits", Config.SmithWithBits || Config.EnableToolRecovery);
     }
@@ -128,9 +130,9 @@ public class ConfigLoader : ModSystem
         ServerConfig serverConfig;
         try
         {
-            serverConfig = JsonConvert.DeserializeObject<ServerConfig>(serialized);
+            serverConfig = DecodeFromWorldConfig(serialized);
         }
-        catch (JsonException e)
+        catch (Exception e) when (e is FormatException or JsonException)
         {
             Mod.Logger.Error("Could not read the server's config; using this client's own: {0}", e);
             return localConfig;
@@ -144,6 +146,23 @@ public class ConfigLoader : ModSystem
         Mod.Logger.Notification("Using the server's config{0}.",
             serverConfig.ServerOverridesClientSettings ? ", including client settings" : "");
         return serverConfig;
+    }
+
+    /// <summary>
+    ///     The config as JSON, Base64-encoded. World config strings are written back out as JSON by vanilla
+    ///     without escaping (<c>StringAttribute.ToJsonToken</c>), and the singleplayer "Modify world" screen parses
+    ///     that output: raw JSON, or any setting holding a quote or backslash, made the save crash that screen.
+    ///     Base64's alphabet needs no escaping. Reusing the key the raw JSON was stored under overwrites it on
+    ///     the next load, which is what repairs a save written by 1.10.4.
+    /// </summary>
+    public static string EncodeForWorldConfig(ServerConfig config)
+    {
+        return Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(config)));
+    }
+
+    public static ServerConfig DecodeFromWorldConfig(string encoded)
+    {
+        return JsonConvert.DeserializeObject<ServerConfig>(Encoding.UTF8.GetString(Convert.FromBase64String(encoded)));
     }
 
     private void Validate(ServerConfig config)

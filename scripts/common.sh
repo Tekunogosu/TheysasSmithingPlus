@@ -177,6 +177,61 @@ install_mod() {
 	printf 'mod:    %s -> %s\n' "$(basename "$zip")" "$installed"
 }
 
+# Splits the flags off the command line, leaving the command in ARGS. Accepted
+# anywhere on the line, so "wipe --no-install" and "--no-install wipe" agree.
+#
+# Any other --flag is refused rather than passed through as the command: a
+# misspelt --no-install would otherwise fall to the usage error at best, and at
+# worst to a script that treats it as its default and rebuilds after all.
+SKIP_MOD_INSTALL=0
+ARGS=()
+parse_args() {
+	for arg in "$@"; do
+		case "$arg" in
+			--no-install) SKIP_MOD_INSTALL=1 ;;
+			--*) die "unknown flag '$arg' (the only flag is --no-install)" ;;
+			*) ARGS+=("$arg") ;;
+		esac
+	done
+}
+
+# Installs a fresh build, or with --no-install keeps whatever copy of the mod is
+# already in the testbed -- a release zip or an older version put there by hand.
+install_or_keep_mod() {
+	if [ "$SKIP_MOD_INSTALL" = 1 ]; then
+		use_installed_mod "$1"
+	else
+		install_mod "$1"
+	fi
+}
+
+# Reports which copy of the mod a --no-install run will load, and stops when
+# there is none: the game would start without it, and the mod under test not
+# loading looks like a bug in the mod rather than a missing file. Matched on the
+# modid inside each zip, as remove_stale_mod_copies does, so a copy under any
+# filename is found.
+use_installed_mod() {
+	target="$1"
+	ours=$(mod_id)
+	found=""
+
+	for existing in "$target"/Mods/*.zip; do
+		[ -e "$existing" ] || continue
+		[ "$(zip_mod_id "$existing")" = "$ours" ] || continue
+		[ -z "$found" ] || die "more than one copy of $ours in $target/Mods; remove all but one"
+		found="$existing"
+	done
+
+	[ -n "$found" ] || die "--no-install, but no copy of $ours is installed in $target/Mods"
+	printf 'mod:    %s (kept, --no-install)\n' "$(basename "$found")"
+}
+
+# The modid recorded in a mod zip's modinfo.json, or nothing if it has none.
+zip_mod_id() {
+	unzip -p "$1" modinfo.json 2>/dev/null |
+		python3 -c 'import sys,re; m=re.search(r"\"modid\"\s*:\s*\"([^\"]+)\"", sys.stdin.read(), re.I); print(m.group(1) if m else "")' 2>/dev/null
+}
+
 # Deletes any previously installed copy of OUR mod from the testbed, matching on
 # the modid recorded inside each zip rather than on its filename, so a copy left
 # behind by an older version or dropped in by a mod manager is caught too. The zip
@@ -194,8 +249,7 @@ remove_stale_mod_copies() {
 		[ -e "$existing" ] || continue
 		[ "$(basename "$existing")" = "$keep" ] && continue
 
-		existing_id=$(unzip -p "$existing" modinfo.json 2>/dev/null |
-			python3 -c 'import sys,re; m=re.search(r"\"modid\"\s*:\s*\"([^\"]+)\"", sys.stdin.read(), re.I); print(m.group(1) if m else "")' 2>/dev/null)
+		existing_id=$(zip_mod_id "$existing")
 
 		case "$existing_id" in
 			"$ours"|smithingplusmaterialcache)
