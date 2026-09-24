@@ -269,6 +269,14 @@
       "default": false
     },
     {
+      "code": "ServerOverridesClientSettings",
+      "ingui": "smithingplus:setting-serveroverridesclientsettings",
+      "type": "boolean",
+      "weight": 0.499,
+      "comment": "smithingplus:setting-serveroverridesclientsettings-desc",
+      "default": false
+    },
+    {
       "type": "separator",
       "title": "smithingplus:settingtitle-clienttweaks",
       "weight": 0.5

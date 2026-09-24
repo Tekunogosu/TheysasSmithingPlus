@@ -4,7 +4,9 @@ using System.Collections.Generic;
 using HarmonyLib;
 using JetBrains.Annotations;
 using SmithingPlus.Util;
+using Vintagestory.API.Client;
 using Vintagestory.API.Common;
+using Vintagestory.API.Config;
 using Vintagestory.API.MathTools;
 using Vintagestory.GameContent;
 
@@ -31,14 +33,22 @@ public static class BlockEntityAnvilPatch
         IPlayer byPlayer,
         BlockSelection blockSel)
     {
-        if (Core.Config.RotationRequiresTongs && !byPlayer.HasHeatResistantHandGear())
+        var activeSlot = byPlayer.InventoryManager.ActiveHotbarSlot;
+        var itemStack = activeSlot.Itemstack;
+
+        // Interacting with a hammer in hand is what rotates the piece, vanilla's rotate and this mod's flip
+        // alike, so that is all the setting withholds. Placing and taking work items stay open without tongs.
+        if (Core.Config.RotationRequiresTongs &&
+            itemStack?.Collectible.GetTool(activeSlot) == EnumTool.Hammer &&
+            !byPlayer.HasHeatResistantHandGear())
         {
+            if (world.Api is ICoreClientAPI capi)
+                capi.TriggerIngameError(__instance, "requiretongs",
+                    Lang.Get($"{Core.ModId}:ingameerror-rotationrequirestongs"));
             __result = false;
             return false;
         }
 
-        var activeSlot = byPlayer.InventoryManager.ActiveHotbarSlot;
-        var itemStack = activeSlot.Itemstack;
         if (itemStack?.Collectible is not ItemHammer itemHammer)
             return true;
 

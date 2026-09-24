@@ -6,6 +6,19 @@ namespace SmithingPlus.Config;
 
 public class ServerConfig
 {
+    /// <summary>
+    ///     Schema version this build writes. A file whose <see cref="ConfigVersion" /> is lower, or absent, is
+    ///     migrated by <see cref="ConfigLoader" />. Raise it together with a new migration step there.
+    /// </summary>
+    public const int CurrentVersion = 2;
+
+    /// <summary>
+    ///     Schema version of the file this was read from. Files written before versioning existed have no such
+    ///     key and count as version 1; the loader reads that from the raw JSON, because the property default
+    ///     would otherwise report every old file as current.
+    /// </summary>
+    public int ConfigVersion { get; set; } = CurrentVersion;
+
     public bool RecoverBitsOnSplit { get; set; } = true;
     public bool HelveHammerBitsRecovery { get; set; } = true;
     public float VoxelsPerBit { get; set; } = 2.1f;
@@ -36,11 +49,22 @@ public class ServerConfig
     public bool DynamicMoldUnits { get; set; } = false;
     public bool HammerTweaks { get; set; } = true;
     public bool RotationRequiresTongs { get; set; } = false;
+    [ClientSetting]
     public bool AnvilShowRecipeVoxels { get; set; } = true;
+    [ClientSetting]
     public bool RememberHammerToolMode { get; set; } = true;
+    [ClientSetting]
     public bool ShowWorkableTemperature { get; set; } = true;
+    [ClientSetting]
     public bool HandbookExtraInfo { get; set; } = true;
+    [ClientSetting]
     public int AnvilRecipeSelectionColumns { get; set; } = 8;
+
+    /// <summary>
+    ///     Makes the server's values win for the <see cref="ClientSettingAttribute" /> settings too, so a server
+    ///     can fix how its players see and use the anvil. Off, each player keeps their own values for those.
+    /// </summary>
+    public bool ServerOverridesClientSettings { get; set; } = false;
 
     /// <summary>
     ///     Logs every anvil action, on both sides, for tracking down actions that appear to happen twice.

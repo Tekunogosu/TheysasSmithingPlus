@@ -91,13 +91,47 @@ public static class ItemHammerPatch
         return toolModes;
     }
 
+    /// <summary>
+    ///     Vanilla's own test for whether a player may handle hot metal. Called rather than reimplemented so
+    ///     that mods extending it count here too -- gloves that stand in for tongs, for one, patch this method.
+    ///     It reads nothing from the inventory it is called on, so any of the player's inventories will do.
+    /// </summary>
+    private static readonly System.Func<InventoryBase, IPlayer, bool> VanillaHasHeatResistantHandGear =
+        AccessTools.Method(typeof(InventoryBase), "hasHeatResistantHandGear") is { } method
+            ? AccessTools.MethodDelegate<System.Func<InventoryBase, IPlayer, bool>>(method)
+            : null;
+
     public static bool HasHeatResistantHandGear(this IPlayer player)
     {
-        if (player == null)
+        if (player?.Entity == null)
             return false;
+        return HoldsHeatResistantGear(player) || WearsHeatResistantGloves(player);
+    }
+
+    private static bool HoldsHeatResistantGear(IPlayer player)
+    {
+        if (VanillaHasHeatResistantHandGear != null &&
+            player.InventoryManager.GetOwnInventory(GlobalConstants.hotBarInvClassName) is InventoryBase inventory)
+            return VanillaHasHeatResistantHandGear(inventory, player);
+
+        // Reached only if a game update renames the vanilla method: tongs alone, as vanilla checked them.
         var leftHandItemSlot = player.Entity.LeftHandItemSlot;
-        return leftHandItemSlot != null &&
-               (leftHandItemSlot.Itemstack?.Collectible.Attributes?.IsTrue("heatResistant") ?? false);
+        return leftHandItemSlot?.Itemstack?.Collectible.Attributes?.IsTrue("heatResistant") ?? false;
+    }
+
+    /// <summary>
+    ///     Worn gloves marked <c>heatResistantGloves</c>, the attribute Aldi's Classes gives its blacksmith gloves.
+    ///     Checked here as well as through vanilla because the mod that honours those gloves patches vanilla's
+    ///     check on the server only: the client would refuse the rotation and never send it to the server.
+    /// </summary>
+    private static bool WearsHeatResistantGloves(IPlayer player)
+    {
+        var worn = player.InventoryManager.GetOwnInventory(GlobalConstants.characterInvClassName);
+        if (worn == null) return false;
+        foreach (var slot in worn)
+            if (slot.Itemstack?.Collectible.Attributes?.IsTrue("heatResistantGloves") == true)
+                return true;
+        return false;
     }
 
     private static SkillItem[] GetOrCreateFlipToolMode(ICoreClientAPI capi)
