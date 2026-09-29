@@ -26,7 +26,7 @@ public partial class HandbookInfoPatch
         List<RichTextComponentBase> components)
     {
         var moldStacks = CacheHelper.GetOrAdd(
-            Core.MoldStacksCache,
+            Core.MoldStacksCache(capi),
             stack.Collectible.Code.ToString(),
             () => allStacks.Where(s =>
                     s.Collectible is BlockToolMold &&
@@ -53,10 +53,7 @@ public partial class HandbookInfoPatch
         List<RichTextComponentBase> components)
     {
         if (stack.Collectible is not BlockToolMold) return;
-        Core.MaxFuelBurnTemp ??= allStacks
-            .Where(s => s.Collectible.CombustibleProps?.BurnTemperature > 0)
-            .OrderByDescending(s => s.Collectible.CombustibleProps.BurnTemperature)
-            .FirstOrDefault()?.Collectible.CombustibleProps?.BurnTemperature ?? 0;
+        var maxFuelBurnTemp = MaxFuelBurnTemp(capi, allStacks);
 
         // This is a hack, should refactor this to use per-metal required units in the future
         var copperIngot = capi.World.GetItem(new AssetLocation("game:ingot-copper"));
@@ -72,18 +69,16 @@ public partial class HandbookInfoPatch
 
         var castStacks = StacksFromCode(capi, stack, out var existingMetalVariants);
         // Use linq search to find all metal bit stacks
-        var metalBitStacks =
-            Core.MetalBitStacksCache ??=
-                allStacks.Where(s =>
-                    s.Collectible.Code.Path.Contains("metalbit") &&
-                    Enumerable.Contains(existingMetalVariants, s.Collectible.LastCodePart()) &&
-                    s.Collectible.CombustibleProps?.SmeltedStack?.ResolvedItemstack != null &&
-                    s.Collectible.CombustibleProps.SmeltingType == EnumSmeltType.Smelt &&
-                    s.Collectible.CombustibleProps.MeltingPoint <= Core.MaxFuelBurnTemp
-                ).ToArray();
-        var castableMetalVariants =
-            Core.CastableMetalVariantsCache ??=
-                metalBitStacks.Select(s => s.Collectible.Variant["metal"]).ToArray();
+        var metalBitStacks = Core.GetOrCreateMetalBitStacks(capi, () =>
+            allStacks.Where(s =>
+                s.Collectible.Code.Path.Contains("metalbit") &&
+                Enumerable.Contains(existingMetalVariants, s.Collectible.LastCodePart()) &&
+                s.Collectible.CombustibleProps?.SmeltedStack?.ResolvedItemstack != null &&
+                s.Collectible.CombustibleProps.SmeltingType == EnumSmeltType.Smelt &&
+                s.Collectible.CombustibleProps.MeltingPoint <= maxFuelBurnTemp
+            ).ToArray());
+        var castableMetalVariants = Core.GetOrCreateCastableMetalVariants(capi, () =>
+            metalBitStacks.Select(s => s.Collectible.Variant["metal"]).ToArray());
 
         var castStackList = castStacks.Where(s => castableMetalVariants.Contains(s.Collectible.LastCodePart()))
             .ToList();

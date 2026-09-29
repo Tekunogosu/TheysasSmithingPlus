@@ -27,14 +27,17 @@ public class CollectibleBehaviorBrokenToolHead(CollectibleObject collObj) : Coll
     {
         if (!IsBrokenToolHead(itemStack)) return;
         var recipeId = itemStack.Attributes.GetInt("selectedRecipeId");
-        var toolName = CacheHelper.GetOrAdd(
-            Core.RecipeOutputNameCache,
-            recipeId,
-            () =>
-            {
-                Core.Logger.VerboseDebug("Storing recipe output name: {0}", recipeId);
-                return FindRecipeById(recipeId)?.Output?.ResolvedItemstack?.GetName();
-            });
+        var api = collObj.GetLoadedApi();
+        var toolName = api == null
+            ? null
+            : CacheHelper.GetOrAdd(
+                Core.RecipeOutputNameCache(api),
+                recipeId,
+                () =>
+                {
+                    Core.Logger.VerboseDebug("Storing recipe output name: {0}", recipeId);
+                    return FindRecipeById(api, recipeId)?.Output?.ResolvedItemstack?.GetName();
+                });
         dsc.Clear();
         dsc.AppendLine(toolName == null
             ? Lang.Get($"{Core.ModId}:Unknown broken tool part")
@@ -42,9 +45,9 @@ public class CollectibleBehaviorBrokenToolHead(CollectibleObject collObj) : Coll
     }
 
     /// <summary>The smithing recipe with this id, or null. Reached once per id, behind the name cache.</summary>
-    private static SmithingRecipe? FindRecipeById(int recipeId)
+    private static SmithingRecipe? FindRecipeById(ICoreAPI api, int recipeId)
     {
-        var recipes = Core.Api?.GetSmithingRecipes();
+        var recipes = api.GetSmithingRecipes();
         if (recipes == null) return null;
         for (var i = 0; i < recipes.Count; i++)
             if (recipes[i]?.RecipeId == recipeId)

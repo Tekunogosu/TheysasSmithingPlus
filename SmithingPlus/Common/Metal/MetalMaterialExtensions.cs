@@ -20,7 +20,7 @@ public static class MetalMaterialExtensions
     public static MetalMaterial? GetOrCacheMetalMaterial(this CollectibleObject? collObj, ICoreAPI api)
     {
         if (collObj?.Code == null) return null;
-        return CacheHelper.GetOrAddNullable(Core.MetalMaterialCache, collObj.Code.ToString(),
+        return CacheHelper.GetOrAddNullable(Core.MetalMaterialCache(api), collObj.Code.ToString(),
             () => collObj.GetMetalMaterial(api));
     }
 
@@ -124,7 +124,7 @@ public static class MetalMaterialExtensions
         if (collectibleObject?.Code == null) return null;
         // Cached separately from the unprocessed material: the same collectible has a different answer here
         // (a bloom's processed metal is iron, its own is none), so the two must not share a cache entry.
-        return CacheHelper.GetOrAddNullable(Core.MetalMaterialProcessedCache, collectibleObject.Code.ToString(),
+        return CacheHelper.GetOrAddNullable(Core.MetalMaterialProcessedCache(api), collectibleObject.Code.ToString(),
             () => collectibleObject.ResolveMetalMaterialProcessed(api));
     }
 

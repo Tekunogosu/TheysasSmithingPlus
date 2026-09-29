@@ -8,7 +8,7 @@
     "theysa"
   ],
   "description": "Metal tool repair, smithing tweaks and quality of life improvements. Bug and performance fork",
-  "version": "1.10.5",
+  "version": "1.10.6",
   "dependencies": {
     "game": ""
   }

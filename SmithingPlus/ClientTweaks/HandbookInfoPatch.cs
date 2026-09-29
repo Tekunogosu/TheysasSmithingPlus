@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Cairo;
 using HarmonyLib;
 using Vintagestory.API.Client;
@@ -11,6 +12,15 @@ namespace SmithingPlus.ClientTweaks;
 [HarmonyPatchCategory(Core.ClientTweaksCategories.HandbookExtraInfo)]
 public partial class HandbookInfoPatch
 {
+    /// <summary>The hottest burn temperature any fuel among <paramref name="allStacks" /> reaches.</summary>
+    private static float MaxFuelBurnTemp(ICoreClientAPI capi, ItemStack[] allStacks)
+    {
+        return Core.GetOrCreateMaxFuelBurnTemp(capi, () => allStacks
+            .Where(s => s.Collectible.CombustibleProps?.BurnTemperature > 0)
+            .OrderByDescending(s => s.Collectible.CombustibleProps.BurnTemperature)
+            .FirstOrDefault()?.Collectible.CombustibleProps?.BurnTemperature ?? 0);
+    }
+
     public static ItemStack[] StacksFromCode(ICoreClientAPI capi, ItemStack moldStack,
         out List<string> existingMetalVariants)
     {

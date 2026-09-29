@@ -220,7 +220,7 @@ public static class AnvilRecipeSelectorPatch
         ItemStack ingredientStack,
         int recipeId)
     {
-        var voxelCount = CacheHelper.GetOrAdd(Core.RecipeVoxelCountCache, recipeId,
+        var voxelCount = CacheHelper.GetOrAdd(Core.RecipeVoxelCountCache(capi), recipeId,
                 () => capi.GetSmithingRecipes().Find(recipe => recipe.RecipeId == recipeId)?.Voxels.VoxelCount() ?? 0);
         if (voxelCount <= 0)
             return ingredientStack;

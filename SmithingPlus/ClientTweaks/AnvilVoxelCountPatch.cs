@@ -24,7 +24,7 @@ public class AnvilVoxelCountPatch
             return;
         if (__instance.recipeVoxels == null) return;
         if (!__instance.CanWorkCurrent) return;
-        var voxelCount = CacheHelper.GetOrAdd(Core.RecipeVoxelCountCache, __instance.SelectedRecipeId, () =>
+        var voxelCount = CacheHelper.GetOrAdd(Core.RecipeVoxelCountCache(__instance.Api), __instance.SelectedRecipeId, () =>
         {
             Core.Logger.VerboseDebug("Calculating voxel count for: {0}", __instance.SelectedRecipeId);
             return __instance.recipeVoxels.VoxelCount();

@@ -27,11 +27,7 @@ public partial class HandbookInfoPatch
     {
         if (stack.Collectible is not ItemNugget ||
             !stack.Collectible.HasBehavior<CollectibleBehaviorWorkableNugget>()) return;
-        Core.MaxFuelBurnTemp ??= allStacks
-            .Where(s => s.Collectible.CombustibleProps?.BurnTemperature > 0)
-            .OrderByDescending(s => s.Collectible.CombustibleProps.BurnTemperature)
-            .FirstOrDefault()?.Collectible.CombustibleProps?.BurnTemperature ?? 0;
-        if (stack.Collectible.CombustibleProps?.MeltingPoint > Core.MaxFuelBurnTemp) return;
+        if (stack.Collectible.CombustibleProps?.MeltingPoint > MaxFuelBurnTemp(capi, allStacks)) return;
         var moldStacks = allStacks.Where(s =>
                 s.Collectible is BlockToolMold &&
                 GetStackForVariant(capi, s, stack.Collectible.LastCodePart()) != null)

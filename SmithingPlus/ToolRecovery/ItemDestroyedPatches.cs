@@ -89,7 +89,7 @@ public class ItemDestroyedPatches
             byEntity.GetName());
         var entityPlayer = byEntity as EntityPlayer;
         var toolCode = itemStack.Collectible.Code.ToString();
-        var smithingRecipe = CacheHelper.GetOrAddNullable(Core.ToolToRecipeCache, toolCode,
+        var smithingRecipe = CacheHelper.GetOrAddNullable(Core.ToolToRecipeCache(world.Api), toolCode,
             () => ItemDamagedPatches.GetHeadSmithingRecipe(world.Api, itemStack));
         if (smithingRecipe == null)
         {
